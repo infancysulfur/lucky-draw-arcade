@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>💎 보물상자 — 뽑기 왕국</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Gmarket+Sans:wght@300;500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:          #0d0f1a;
+      --bg2:         #131628;
+      --bg3:         #1a1e35;
+      --sidebar-bg:  #10121f;
+      --accent:      #f5c842;
+      --accent2:     #ff6b35;
+      --accent3:     #4ecdc4;
+      --red:         #e84040;
+      --blue:        #378ADD;
+      --green:       #3ecf8e;
+      --text:        #eeeef5;
+      --text-muted:  #8890b0;
+      --text-faint:  #4a5070;
+      --border:      rgba(255,255,255,0.07);
+      --radius:      12px;
+      --radius-lg:   16px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      font-family: 'Noto Sans KR', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none; z-index: 0; opacity: 0.35;
+    }
+
+    .blob {
+      position: fixed; border-radius: 50%;
+      filter: blur(90px); pointer-events: none; z-index: 0;
+      animation: blobFloat 14s ease-in-out infinite alternate;
+    }
+    .blob-1 { width: 420px; height: 420px; background: rgba(245,200,66,0.07); top: -80px; right: -60px; }
+    .blob-2 { width: 360px; height: 360px; background: rgba(62,207,142,0.05); bottom: 60px; left: -80px; animation-delay: -6s; }
+    .blob-3 { width: 260px; height: 260px; background: rgba(78,205,196,0.05); top: 35%; left: 35%; animation-delay: -10s; }
+    @keyframes blobFloat {
+      from { transform: translate(0,0) scale(1); }
+      to   { transform: translate(24px,16px) scale(1.07); }
+    }
+
+    /* ── layout ── */
+    #app {
+      position: relative; z-index: 1;
+      display: flex; width: 100vw; height: 100vh;
+    }
+
+    /* ── sidebar ── */
+    #sidebar {
+      width: 256px; min-width: 256px; height: 100%;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-nav {
+      display: flex; align-items: center; gap: 10px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .back-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      text-decoration: none; font-size: 14px;
+      transition: all .15s; flex-shrink: 0;
+    }
+    .back-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+    .sidebar-logo {
+      font-family: 'Gmarket Sans', sans-serif;
+      font-size: 13px; font-weight: 700;
+      color: var(--accent); text-decoration: none;
+    }
+    .sidebar-logo span { color: var(--text-muted); font-weight: 300; }
+
+    .sidebar-body {
+      flex: 1; overflow-y: auto;
+      padding: 20px 18px;
+      display: flex; flex-direction: column; gap: 22px;
+    }
+    .sidebar-body::-webkit-scrollbar { width: 4px; }
+    .sidebar-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+    .game-title-block { display: flex; align-items: center; gap: 10px; }
+    .game-title-icon { font-size: 28px; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5)); }
+    .game-title-text { font-family: 'Gmarket Sans', sans-serif; font-size: 17px; font-weight: 700; color: var(--text); }
+    .game-title-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+    .s-label {
+      font-size: 10px; font-weight: 700;
+      color: var(--text-faint);
+      text-transform: uppercase; letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+    .s-divider { height: 1px; background: var(--border); }
+
+    /* ── [FIX 1] box count: +/- buttons + text input ── */
+    .count-display {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 6px 8px;
+      gap: 6px;
+    }
+    .count-btn {
+      width: 32px; height: 32px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted); font-size: 18px;
+      cursor: pointer; transition: all .15s;
+      user-select: none;
+    }
+    .count-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); border-color: rgba(255,255,255,0.15); }
+    .count-btn:active { transform: scale(0.92); }
+
+    /* [FIX 1] editable number input replaces static div */
+    #box-count-input {
+      flex: 1;
+      text-align: center;
+      font-family: 'Gmarket Sans', sans-serif;
+      font-size: 30px; font-weight: 700;
+      color: var(--accent);
+      background: transparent;
+      border: none; outline: none;
+      width: 0; min-width: 0;
+      -moz-appearance: textfield;
+    }
+
+    #box-count-input::-webkit-inner-spin-button,
+    #box-count-input::-webkit-outer-spin-button { display: none; }
+    #box-count-input:focus { color: #fff; }
+
+    .count-hint { font-size: 10px; color: var(--text-faint); margin-top: 5px; }
+
+    /* treasure mode selector */
+    .mode-group { display: flex; gap: 6px; flex-wrap: wrap; }
+    .mode-btn {
+      font-size: 11px; padding: 4px 11px;
+      border: 1px solid var(--border); border-radius: 20px;
+      background: var(--bg3); color: var(--text-muted);
+      cursor: pointer; transition: all .15s;
+    }
+    .mode-btn:hover { border-color: rgba(245,200,66,0.3); color: var(--text); }
+    .mode-btn.active { background: rgba(245,200,66,0.15); color: var(--accent); border-color: rgba(245,200,66,0.4); }
+
+    .num-row { display: flex; align-items: center; gap: 8px; }
+    .num-row label { font-size: 12px; color: var(--text-muted); flex: 1; }
+    .num-input {
+      width: 60px; text-align: center;
+      font-size: 14px; font-weight: 700;
+      padding: 5px 4px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--bg3); color: var(--accent);
+      font-family: 'Gmarket Sans', sans-serif;
+      transition: border-color .15s;
+    }
+    .num-input:focus { outline: none; border-color: rgba(245,200,66,0.4); }
+    .num-input::-webkit-inner-spin-button,
+    .num-input::-webkit-outer-spin-button { opacity: 1; }
+    .num-hint { font-size: 10px; color: var(--text-faint); margin-top: 4px; }
+
+    /* ── [FIX 3] stat pills — bigger, bolder numbers ── */
+    .stat-row { display: flex; gap: 8px; }
+    .stat-pill {
+      flex: 1; text-align: center;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 6px 8px;
+    }
+    .stat-pill .pill-num {
+      font-family: 'Gmarket Sans', sans-serif;
+      font-size: 32px; font-weight: 700;   /* was 20px */
+      line-height: 1;
+    }
+    .stat-pill .pill-label {
+      font-size: 11px; font-weight: 700;   /* was 10px */
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .pill-treasure .pill-num { color: var(--accent); }
+    .pill-empty .pill-num { color: var(--text-muted); }
+
+    /* start btn */
+    #start-btn {
+      width: 100%; padding: 12px;
+      font-size: 14px; font-weight: 700;
+      font-family: 'Gmarket Sans', sans-serif;
+      background: linear-gradient(135deg, #f5c842, #ff6b35);
+      color: #0d0f1a;
+      border: none; border-radius: var(--radius);
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+    }
+    #start-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+    #start-btn:active { transform: translateY(0); }
+
+    .sidebar-footer { padding: 0 18px 18px; flex-shrink: 0; }
+
+    /* ── main ── */
+    #main {
+      flex: 1; height: 100%;
+      position: relative;
+      background: var(--bg2);
+      overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    #idle-screen {
+      text-align: center;
+      animation: fadeUp .5s ease both;
+    }
+    .idle-icon { font-size: 72px; margin-bottom: 16px; filter: drop-shadow(0 8px 24px rgba(245,200,66,0.25)); }
+    .idle-title { font-family: 'Gmarket Sans', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); }
+    .idle-sub { font-size: 14px; color: var(--text-muted); margin-top: 8px; }
+
+    #game-screen {
+      display: none;
+      width: 100%; height: 100%;
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 32px; gap: 24px;
+    }
+
+    /* ── [FIX 3] status bar — bigger numbers ── */
+    #status-bar {
+      display: flex; align-items: center; gap: 16px;
+      background: rgba(13,15,26,0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 40px;
+      padding: 10px 24px;
+      font-size: 14px; color: var(--text-muted);
+    }
+    .status-item { display: flex; align-items: center; gap: 7px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot-treasure { background: var(--accent); box-shadow: 0 0 8px rgba(245,200,66,0.6); }
+    .dot-empty { background: var(--text-faint); }
+    .status-num {
+      font-family: 'Gmarket Sans', sans-serif;
+      font-size: 20px; font-weight: 700;   /* was default */
+      color: var(--text);
+    }
+    .status-sep { color: var(--text-faint); }
+
+    /* chests */
+    #chests-wrap { flex: 1; width: 100%; display: flex; align-items: center; justify-content: center; }
+    #chests-grid {
+      display: flex; flex-wrap: wrap; gap: 20px;
+      justify-content: center; align-items: center;
+      max-width: 900px;
+    }
+
+    .chest {
+      position: relative; cursor: pointer;
+      transition: transform .2s cubic-bezier(.34,1.56,.64,1);
+    }
+    .chest:hover:not(.opened) { transform: translateY(-6px) scale(1.05); }
+    .chest:hover:not(.opened) .chest-glow { opacity: 1; }
+
+    .chest-inner { position: relative; perspective: 600px; }
+
+    .chest-glow {
+      position: absolute; inset: -10px;
+      border-radius: 20px; opacity: 0;
+      transition: opacity .2s; pointer-events: none;
+    }
+
+    .chest-svg {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+    }
+
+    .chest.opened .chest-lid {
+      transform-origin: 50% 100%;
+      animation: openLid .4s cubic-bezier(.34,1.2,.64,1) forwards;
+    }
+    @keyframes openLid {
+      0%   { transform: rotateX(0deg); }
+      100% { transform: rotateX(-130deg); }
+    }
+
+    .chest-reveal {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      opacity: 0;
+      transform: scale(0.5) translateY(10px);
+      transition: opacity .3s .25s, transform .4s .25s cubic-bezier(.34,1.56,.64,1);
+      pointer-events: none;
+    }
+    .chest.opened .chest-reveal { opacity: 1; transform: scale(1) translateY(0); }
+
+    .reveal-emoji { font-size: 34px; }
+    /* ── [FIX 3] bigger reveal label ── */
+    .reveal-label {
+      font-family: 'Gmarket Sans', sans-serif;
+      font-size: 13px; font-weight: 700;
+      margin-top: 5px;
+    }
+
+    .particle {
+      position: absolute; pointer-events: none; font-size: 16px;
+      animation: particleFly .8s ease-out forwards;
+    }
+    @keyframes particleFly {
+      0%   { opacity: 1; transform: translate(0,0) scale(1); }
+      100% { opacity: 0; transform: var(--tx) scale(0.3); }
+    }
+
+    /* ── [FIX 3] chest number bigger ── */
+    .chest-num {
+      position: absolute;
+      bottom: -22px; left: 50%; transform: translateX(-50%);
+      font-family: 'Gmarket Sans', sans-serif;
+      font-size: 13px; font-weight: 700;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* result banner */
+    #result-banner {
+      position: absolute; inset: 0;
+      background: rgba(5,7,18,0.8);
+      backdrop-filter: blur(8px);
+      display: none; align-items: center; justify-content: center;
+      z-index: 20;
+    }
+    #result-box {
+      background: var(--bg2);
+      border: 1px solid rgba(245,200,66,0.2);
+      border-radius: var(--radius-lg);
+      padding: 40px 52px; text-align: center;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+      animation: popIn .35s cubic-bezier(.34,1.56,.64,1) both;
+      min-width: 300px;
+    }
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.8); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    .result-icon { font-size: 60px; margin-bottom: 12px; }
+    .result-title { font-family: 'Gmarket Sans', sans-serif; font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .result-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
+    .result-btns { display: flex; gap: 10px; justify-content: center; }
+    .btn-primary {
+      padding: 10px 24px; font-size: 13px; font-weight: 700;
+      font-family: 'Gmarket Sans', sans-serif;
+      background: linear-gradient(135deg, #f5c842, #ff6b35);
+      color: #0d0f1a; border: none;
+      border-radius: var(--radius); cursor: pointer; transition: opacity .15s;
+    }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-secondary {
+      padding: 10px 20px; font-size: 13px; font-weight: 500;
+      background: rgba(255,255,255,0.06); color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center;
+      transition: all .15s; font-family: 'Noto Sans KR', sans-serif;
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .chest-enter { animation: chestEnter .4s cubic-bezier(.34,1.4,.64,1) both; }
+    @keyframes chestEnter {
+      from { opacity: 0; transform: scale(0.5) translateY(20px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+
+<div id="app">
+
+  <!-- ── Sidebar ── -->
+  <div id="sidebar">
+    <div class="sidebar-nav">
+      <a class="back-btn" href="index.html">←</a>
+      <a class="sidebar-logo" href="index.html">🎲 뽑기왕국 <span>/ 보물</span></a>
+    </div>
+
+    <div class="sidebar-body">
+
+      <div class="game-title-block">
+        <div class="game-title-icon">💎</div>
+        <div>
+          <div class="game-title-text">보물상자</div>
+          <div class="game-title-sub">행운의 상자를 열어보세요!</div>
+        </div>
+      </div>
+
+      <div class="s-divider"></div>
+
+      <!-- [FIX 1] 총 상자 개수 — 버튼 + 텍스트 직접 입력 -->
+      <div>
+        <div class="s-label">총 상자 개수</div>
+        <div class="count-display">
+          <div class="count-btn" id="box-minus">−</div>
+          <input type="number" id="box-count-input" min="2" max="30" value="6">
+          <div class="count-btn" id="box-plus">+</div>
+        </div>
+        <div class="count-hint">최소 2개 · 최대 30개</div>
+      </div>
+
+      <!-- 보물 개수 -->
+      <div>
+        <div class="s-label">보물 개수</div>
+        <div class="mode-group" id="treasure-mode-group">
+          <div class="mode-btn active" data-mode="manual">직접 입력</div>
+          <div class="mode-btn" data-mode="random">랜덤</div>
+        </div>
+        <div id="treasure-manual" style="margin-top:10px;">
+          <div class="num-row">
+            <label>보물 수</label>
+            <input type="number" id="treasure-count" class="num-input" min="1" max="5" value="1">
+          </div>
+          <div class="num-hint" id="treasure-hint">1 ~ 상자수-1 이하</div>
+        </div>
+        <!-- [FIX 2] random mode: 보물 개수 숨김 -->
+        <div id="treasure-random-label" style="display:none; margin-top:8px;">
+          <div style="font-size:12px; color:var(--text-muted); background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); padding:8px 10px; line-height:1.5;">
+            🎲 보물 개수가 숨겨집니다.<br>열어봐야 알 수 있어요!
+          </div>
+        </div>
+      </div>
+
+      <!-- stat preview -->
+      <div>
+        <div class="s-label">구성 미리보기</div>
+        <div class="stat-row">
+          <div class="stat-pill pill-treasure">
+            <div class="pill-num" id="preview-treasure">1</div>
+            <div class="pill-label">💎 보물</div>
+          </div>
+          <div class="stat-pill pill-empty">
+            <div class="pill-num" id="preview-empty">5</div>
+            <!-- [FIX 4] 꽝 → 해골 -->
+            <div class="pill-label">💀 꽝</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="sidebar-footer">
+      <button id="start-btn">🎮 게임 시작</button>
+    </div>
+  </div>
+
+  <!-- ── Main ── -->
+  <div id="main">
+
+    <div id="idle-screen">
+      <div class="idle-icon">💎</div>
+      <div class="idle-title">보물상자 선택</div>
+      <div class="idle-sub">상자를 설정하고 게임을 시작하세요</div>
+    </div>
+
+    <div id="game-screen">
+      <!-- [FIX 2] status bar: 랜덤 모드일 때 보물 수 숨김 처리는 JS에서 -->
+      <div id="status-bar">
+        <div class="status-item" id="st-treasure-item">
+          <div class="status-dot dot-treasure"></div>
+          <span>보물</span>
+          <span class="status-num" id="st-treasure">1</span>
+        </div>
+        <span class="status-sep" id="st-sep1">·</span>
+        <div class="status-item">
+          <div class="status-dot dot-empty"></div>
+          <span>남은 상자</span>
+          <span class="status-num" id="st-remaining">6</span>
+        </div>
+        <span class="status-sep">·</span>
+        <div class="status-item">
+          <span>열림</span>
+          <span class="status-num" id="st-opened">0</span>
+        </div>
+      </div>
+
+      <div id="chests-wrap">
+        <div id="chests-grid"></div>
+      </div>
+    </div>
+
+    <div id="result-banner" style="display:none;">
+      <div id="result-box">
+        <div class="result-icon" id="result-icon">💎</div>
+        <div class="result-title" id="result-title">보물 발견!</div>
+        <div class="result-sub" id="result-sub">행운이 찾아왔어요</div>
+        <div class="result-btns">
+          <button class="btn-primary" id="play-again-btn">🔄 다시 하기</button>
+          <a href="index.html" class="btn-secondary">🏠 홈으로</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let boxCount      = 6;
+  let treasureCount = 1;
+  let treasureMode  = 'manual';
+  let gameActive    = false;
+  let chestData     = [];
+  let openedCount   = 0;
+
+  const boxInput        = document.getElementById('box-count-input');
+  const boxMinus        = document.getElementById('box-minus');
+  const boxPlus         = document.getElementById('box-plus');
+  const treasureInput   = document.getElementById('treasure-count');
+  const treasureHint    = document.getElementById('treasure-hint');
+  const previewTreasure = document.getElementById('preview-treasure');
+  const previewEmpty    = document.getElementById('preview-empty');
+  const startBtn        = document.getElementById('start-btn');
+  const idleScreen      = document.getElementById('idle-screen');
+  const gameScreen      = document.getElementById('game-screen');
+  const chestsGrid      = document.getElementById('chests-grid');
+  const resultBanner    = document.getElementById('result-banner');
+  const resultIcon      = document.getElementById('result-icon');
+  const resultTitle     = document.getElementById('result-title');
+  const resultSub       = document.getElementById('result-sub');
+  const stTreasureItem  = document.getElementById('st-treasure-item');
+  const stSep1          = document.getElementById('st-sep1');
+  const stTreasure      = document.getElementById('st-treasure');
+  const stRemaining     = document.getElementById('st-remaining');
+  const stOpened        = document.getElementById('st-opened');
+
+  /* ── helpers ── */
+  function clampBox(v) {
+    v = parseInt(v);
+    if (isNaN(v) || v < 2)  v = 2;
+    if (v > 30)             v = 30;
+    return v;
+  }
+
+  function applyBoxCount(v) {
+    boxCount = clampBox(v);
+    boxInput.value = boxCount;
+    updateTreasureMax();
+  }
+
+  function updateTreasureMax() {
+    const max = boxCount - 1;
+    treasureInput.max = max;
+    if (treasureCount > max) { treasureCount = max; treasureInput.value = max; }
+    if (treasureCount < 1)   { treasureCount = 1;   treasureInput.value = 1; }
+    treasureHint.textContent = `1 ~ ${max} 사이로 입력`;
+    updatePreview();
+  }
+
+  function updatePreview() {
+    if (treasureMode === 'random') {
+      previewTreasure.textContent = '?';
+      previewEmpty.textContent    = '?';
+    } else {
+      previewTreasure.textContent = treasureCount;
+      previewEmpty.textContent    = boxCount - treasureCount;
+    }
+  }
+
+  /* [FIX 1] box count controls */
+  boxMinus.addEventListener('click', () => applyBoxCount(boxCount - 1));
+  boxPlus.addEventListener('click',  () => applyBoxCount(boxCount + 1));
+  boxInput.addEventListener('change', () => applyBoxCount(boxInput.value));
+  boxInput.addEventListener('input',  () => {
+    /* live update only if valid */
+    const v = parseInt(boxInput.value);
+    if (!isNaN(v) && v >= 2 && v <= 30) applyBoxCount(v);
+  });
+
+  /* treasure mode */
+  document.getElementById('treasure-mode-group').addEventListener('click', e => {
+    const btn = e.target.closest('.mode-btn');
+    if (!btn) return;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    treasureMode = btn.dataset.mode;
+    const isManual = treasureMode === 'manual';
+    document.getElementById('treasure-manual').style.display       = isManual ? 'block' : 'none';
+    document.getElementById('treasure-random-label').style.display = isManual ? 'none'  : 'block';
+    updatePreview();
+  });
+
+  treasureInput.addEventListener('input', () => {
+    let v = parseInt(treasureInput.value);
+    const max = boxCount - 1;
+    if (isNaN(v) || v < 1) v = 1;
+    if (v > max) v = max;
+    treasureInput.value = v;
+    treasureCount = v;
+    updatePreview();
+  });
+
+  /* ── game ── */
+  function startGame() {
+    gameActive  = true;
+    openedCount = 0;
+
+    const actualTreasure = treasureMode === 'random'
+      ? Math.floor(Math.random() * (boxCount - 1)) + 1
+      : treasureCount;
+
+    chestData = Array.from({ length: boxCount }, (_, i) => ({
+      isTreasure: i < actualTreasure,
+      opened: false
+    }));
+    for (let i = chestData.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [chestData[i], chestData[j]] = [chestData[j], chestData[i]];
+    }
+
+    /* [FIX 2] hide treasure count in status bar when random */
+    if (treasureMode === 'random') {
+      stTreasureItem.style.display = 'none';
+      stSep1.style.display         = 'none';
+    } else {
+      stTreasureItem.style.display = '';
+      stSep1.style.display         = '';
+      stTreasure.textContent = actualTreasure;
+    }
+    stRemaining.textContent = boxCount;
+    stOpened.textContent    = 0;
+
+    idleScreen.style.display   = 'none';
+    gameScreen.style.display   = 'flex';
+    resultBanner.style.display = 'none';
+
+    renderChests();
+  }
+
+  function renderChests() {
+    chestsGrid.innerHTML = '';
+    const size = boxCount <= 6 ? 110 : boxCount <= 12 ? 90 : 74;
+    const gap  = boxCount <= 6 ? 24  : boxCount <= 12 ? 18 : 14;
+    chestsGrid.style.gap = gap + 'px';
+
+    chestData.forEach((chest, idx) => {
+      const el = document.createElement('div');
+      el.className = 'chest chest-enter';
+      el.style.animationDelay = (idx * 0.06) + 's';
+
+      const glowColor = chest.isTreasure ? 'rgba(245,200,66,0.35)' : 'rgba(78,205,196,0.2)';
+
+      /* [FIX 4] 꽝 이모지 → 💀 해골 */
+      el.innerHTML = `
+        <div class="chest-inner" style="width:${size}px;height:${size}px;">
+          <div class="chest-glow" style="background:radial-gradient(circle, ${glowColor}, transparent 70%);"></div>
+          <svg class="chest-svg" viewBox="0 0 100 90" xmlns="http://www.w3.org/2000/svg">
+            <rect x="8" y="44" width="84" height="42" rx="7" fill="#2a1f0e" stroke="#7a5c2a" stroke-width="2.5"/>
+            <rect x="8" y="58" width="84" height="6" fill="rgba(255,255,255,0.04)" rx="2"/>
+            <rect x="40" y="50" width="20" height="16" rx="4" fill="#b8860b" stroke="#f5c842" stroke-width="1.5"/>
+            <circle cx="50" cy="57" r="4" fill="#0d0f1a" stroke="#f5c842" stroke-width="1.2"/>
+            <rect x="47.5" y="57" width="5" height="6" rx="1" fill="#0d0f1a"/>
+            <circle cx="20" cy="44" r="4" fill="#7a5c2a" stroke="#b8860b" stroke-width="1"/>
+            <circle cx="80" cy="44" r="4" fill="#7a5c2a" stroke="#b8860b" stroke-width="1"/>
+            <g class="chest-lid">
+              <rect x="8" y="14" width="84" height="32" rx="7" fill="#3d2c0f" stroke="#7a5c2a" stroke-width="2.5"/>
+              <rect x="8" y="14" width="84" height="10" fill="#5a3f15" rx="5"/>
+              <circle cx="20" cy="20" r="2.5" fill="#b8860b"/>
+              <circle cx="80" cy="20" r="2.5" fill="#b8860b"/>
+              <circle cx="50" cy="18" r="2.5" fill="#b8860b"/>
+            </g>
+          </svg>
+          <div class="chest-reveal">
+            <div class="reveal-emoji">${chest.isTreasure ? '💎' : '💀'}</div>
+            <div class="reveal-label" style="color:${chest.isTreasure ? '#f5c842' : '#8890b0'}">
+              ${chest.isTreasure ? '보물!' : '꽝'}
+            </div>
+          </div>
+        </div>
+        <div class="chest-num">${idx + 1}번</div>
+      `;
+
+      el.addEventListener('click', () => openChest(idx, el, chest));
+      chestsGrid.appendChild(el);
+    });
+  }
+
+  function openChest(idx, el, chest) {
+    if (!gameActive || chest.opened) return;
+    chest.opened = true;
+    openedCount++;
+    el.classList.add('opened');
+    el.style.cursor = 'default';
+
+    stRemaining.textContent = boxCount - openedCount;
+    stOpened.textContent    = openedCount;
+
+    if (chest.isTreasure) spawnParticles(el);
+
+    const remainingTreasures = chestData.filter(c => c.isTreasure && !c.opened).length;
+    const remainingBoxes     = chestData.filter(c => !c.opened).length;
+
+    setTimeout(() => {
+      if (remainingBoxes === 0) {
+        showResult(chest.isTreasure, remainingTreasures === 0 ? 'all_found' : 'all_opened');
+      } else if (remainingTreasures === 0) {
+        showResult(true, 'all_found');
+      }
+    }, 600);
+  }
+
+  function spawnParticles(el) {
+    const rect     = el.getBoundingClientRect();
+    const mainRect = document.getElementById('main').getBoundingClientRect();
+    const cx = rect.left - mainRect.left + rect.width  / 2;
+    const cy = rect.top  - mainRect.top  + rect.height / 2;
+    const SPARKS = ['✨','⭐','💫','🌟','✦'];
+    for (let i = 0; i < 8; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      p.textContent = SPARKS[Math.floor(Math.random() * SPARKS.length)];
+      const angle = (i / 8) * Math.PI * 2;
+      const dist  = 50 + Math.random() * 50;
+      p.style.left = cx + 'px';
+      p.style.top  = cy + 'px';
+      p.style.setProperty('--tx', `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)`);
+      p.style.animationDelay = (Math.random() * 0.15) + 's';
+      document.getElementById('main').appendChild(p);
+      p.addEventListener('animationend', () => p.remove());
+    }
+  }
+
+  function showResult(wasTreasure, type) {
+    gameActive = false;
+    if (type === 'all_found') {
+      resultIcon.textContent  = '🎊';
+      resultTitle.textContent = '모든 보물을 찾았어요!';
+      resultTitle.style.color = '#f5c842';
+      resultSub.textContent   = '축하드려요! 모든 보물상자가 열렸습니다.';
+    } else if (wasTreasure) {
+      resultIcon.textContent  = '💎';
+      resultTitle.textContent = '보물 발견!';
+      resultTitle.style.color = '#f5c842';
+      resultSub.textContent   = '마지막 상자에서 보물이 나왔어요!';
+    } else {
+      resultIcon.textContent  = '💀';
+      resultTitle.textContent = '게임 종료';
+      resultTitle.style.color = 'var(--text)';
+      resultSub.textContent   = '모든 상자를 열었어요.';
+    }
+    resultBanner.style.display = 'flex';
+  }
+
+  document.getElementById('play-again-btn').addEventListener('click', () => {
+    resultBanner.style.display = 'none';
+    startGame();
+  });
+  startBtn.addEventListener('click', startGame);
+
+  updateTreasureMax();
+  updatePreview();
+</script>
+</body>
+</html>
