@@ -105,6 +105,99 @@
     .btn-s:hover{background:rgba(255,255,255,.1);color:var(--text)}
     .btn-green{background:rgba(62,207,142,.15);color:#3ecf8e;border-color:rgba(62,207,142,.3)}
     .btn-green:hover{background:rgba(62,207,142,.25);color:#3ecf8e}
+  
+    /* ── participant save/load ── */
+    .p-btns { display: flex; gap: 6px; margin-top: 6px; }
+    .p-btn {
+      flex: 1; font-size: 11px; font-weight: 700;
+      font-family: 'Gmarket Sans', sans-serif;
+      padding: 5px 0; border-radius: 8px; cursor: pointer;
+      transition: all .15s; border: 1px solid;
+    }
+    .p-btn-save {
+      background: rgba(245,200,66,.12); color: #f5c842;
+      border-color: rgba(245,200,66,.35);
+    }
+    .p-btn-save:hover { background: rgba(245,200,66,.22); }
+    .p-btn-load {
+      background: rgba(78,205,196,.1); color: #4ecdc4;
+      border-color: rgba(78,205,196,.3);
+    }
+    .p-btn-load:hover { background: rgba(78,205,196,.2); }
+
+    /* modal backdrop */
+    #plist-modal {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      background: rgba(5,7,18,.8); backdrop-filter: blur(6px);
+      align-items: center; justify-content: center;
+    }
+    #plist-box {
+      background: #131628; border: 1px solid rgba(245,200,66,.2);
+      border-radius: 16px; padding: 24px 24px 20px;
+      width: 340px; max-width: 90vw;
+      box-shadow: 0 24px 64px rgba(0,0,0,.6);
+      animation: pmIn .25s cubic-bezier(.34,1.4,.64,1) both;
+    }
+    @keyframes pmIn { from{opacity:0;transform:scale(.9)} to{opacity:1;transform:scale(1)} }
+    #plist-title {
+      font-family: 'Gmarket Sans', sans-serif; font-size: 15px; font-weight: 700;
+      color: #eeeef5; margin-bottom: 14px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    #plist-close {
+      cursor: pointer; font-size: 18px; color: #8890b0; line-height: 1;
+      background: none; border: none; padding: 0;
+    }
+    #plist-close:hover { color: #eeeef5; }
+    /* save form */
+    #plist-save-row {
+      display: flex; gap: 6px; margin-bottom: 12px;
+    }
+    #plist-name-input {
+      flex: 1; font-size: 12px; padding: 6px 10px;
+      border: 1px solid rgba(255,255,255,.08); border-radius: 8px;
+      background: #1a1e35; color: #eeeef5;
+      font-family: 'Noto Sans KR', sans-serif;
+    }
+    #plist-name-input:focus { outline: none; border-color: rgba(245,200,66,.4); }
+    #plist-do-save {
+      font-size: 11px; font-weight: 700; padding: 6px 12px;
+      background: linear-gradient(135deg,#f5c842,#ff6b35); color: #0d0f1a;
+      border: none; border-radius: 8px; cursor: pointer;
+      font-family: 'Gmarket Sans', sans-serif;
+    }
+    #plist-do-save:hover { opacity: .85; }
+    /* list */
+    #plist-empty {
+      font-size: 12px; color: #4a5070; text-align: center;
+      padding: 20px 0;
+    }
+    .plist-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.07);
+      background: #1a1e35; margin-bottom: 6px;
+      cursor: pointer; transition: all .15s;
+    }
+    .plist-item:hover { border-color: rgba(245,200,66,.35); background: rgba(245,200,66,.06); }
+    .plist-item-info { flex: 1; min-width: 0; }
+    .plist-item-name {
+      font-family: 'Gmarket Sans', sans-serif; font-size: 13px; font-weight: 700;
+      color: #eeeef5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .plist-item-preview {
+      font-size: 10px; color: #8890b0; margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .plist-item-del {
+      font-size: 14px; color: #4a5070; background: none; border: none;
+      cursor: pointer; padding: 2px 4px; border-radius: 5px; flex-shrink: 0;
+    }
+    .plist-item-del:hover { color: #e84040; background: rgba(232,64,64,.1); }
+    #plist-scroll { max-height: 240px; overflow-y: auto; }
+    #plist-scroll::-webkit-scrollbar { width: 4px; }
+    #plist-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 4px; }
+
   </style>
 </head>
 <body>
@@ -127,6 +220,10 @@
     <div>
       <div class="slabel">참가자</div>
       <textarea id="players-ta" rows="4" placeholder="쉼표로 구분&#10;예) 철수,영희,민준,수아">철수,영희,민준,수아,지호,현우,지수,민아</textarea>
+        <div class="p-btns">
+          <button class="p-btn p-btn-save" onclick="pSave()">💾 참가자 저장</button>
+          <button class="p-btn p-btn-load" onclick="pOpenModal()">📂 불러오기</button>
+        </div>
     </div>
 
     <div>
@@ -451,45 +548,63 @@ function updatePlayers(dt){
     let fx=0, fy=0;
     let threatened = false;
 
-    /* flee from nearby taggers — 반응은 하되 속도 부스트 없음 */
+    /* ── 도망: 모둠 유닛 반경 안에 들어오면 반대 방향 ── */
     activeTaggers.forEach(tg => {
-      const dx = p.x-tg.x, dy=p.y-tg.y;
-      const d  = Math.sqrt(dx*dx+dy*dy)||1;
+      const dx = p.x - tg.x, dy = p.y - tg.y;
+      const d  = Math.sqrt(dx*dx + dy*dy) || 1;
       if(d < FLEE_RADIUS){
         threatened = true;
-        /* strength: 거리에 비례하되 과도한 급가속 방지 */
-        const strength = (1-(d/FLEE_RADIUS)) * PS * 2.5;
-        fx += (dx/d)*strength;
-        fy += (dy/d)*strength;
+        const strength = (1 - d/FLEE_RADIUS) * PS * 2.8;
+        fx += (dx/d) * strength;
+        fy += (dy/d) * strength;
       }
     });
 
-    /* wander: 위협 없을 때 wanderAngle 방향으로 배회 */
+    /* ── 배회: 위협 없을 때 부드럽게 방향 유지하며 이동 ── */
     if(!threatened){
-      p.wanderAngle += (Math.random()-0.5) * 1.0 * dt * 60;
-      fx += Math.cos(p.wanderAngle) * PS * 1.2;
-      fy += Math.sin(p.wanderAngle) * PS * 1.2;
+      /* wanderAngle을 조금씩만 바꿔 직선에 가깝게 이동 */
+      p.wanderAngle += (Math.random()-0.5) * 0.25;
+
+      /* 목표 속도 방향으로 부드럽게 가속 */
+      const targetVx = Math.cos(p.wanderAngle) * PS;
+      const targetVy = Math.sin(p.wanderAngle) * PS;
+      /* 현재 속도를 목표 속도 쪽으로 천천히 당기기 (lerp) */
+      p.vx += (targetVx - p.vx) * 0.06;
+      p.vy += (targetVy - p.vy) * 0.06;
+    } else {
+      /* 위협 시: 도망 힘 적용 */
+      p.vx += fx * dt;
+      p.vy += fy * dt;
+
+      /* 속도 상한 */
+      const spd = Math.sqrt(p.vx*p.vx + p.vy*p.vy) || 1;
+      if(spd > PS){ p.vx = p.vx/spd*PS; p.vy = p.vy/spd*PS; }
     }
 
-    p.vx += fx * dt;
-    p.vy += fy * dt;
+    /* 배회 중엔 마찰 거의 없음 — 멀리까지 자연스럽게 이동 */
+    if(!threatened){
+      p.vx *= 0.98;
+      p.vy *= 0.98;
+    } else {
+      p.vx *= 0.90;
+      p.vy *= 0.90;
+    }
 
-    /* 속도 상한: 위협/평상시 동일하게 PS로 고정 — 대시 없음 */
-    const spd = Math.sqrt(p.vx*p.vx+p.vy*p.vy)||1;
-    if(spd > PS){ p.vx=p.vx/spd*PS; p.vy=p.vy/spd*PS; }
-
-    /* 감속: 항상 동일한 마찰 */
-    p.vx *= 0.86;
-    p.vy *= 0.86;
-
-    p.x += p.vx*dt;
-    p.y += p.vy*dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
     clampToArena(p, PLAYER_R);
 
-    /* 벽 근처에서 wander 방향을 중앙 쪽으로 */
-    const ddx=p.x-arenaX, ddy=p.y-arenaY;
-    if(Math.sqrt(ddx*ddx+ddy*ddy) > arenaR*0.82){
-      p.wanderAngle = Math.atan2(arenaY-p.y, arenaX-p.x) + (Math.random()-0.5)*0.6;
+    /* ── 벽 반응: 벽 가까이 오면 방향을 반전 ── */
+    const ddx = p.x - arenaX, ddy = p.y - arenaY;
+    const dd  = Math.sqrt(ddx*ddx + ddy*ddy);
+    if(dd > arenaR * 0.78){
+      /* 벽 법선 방향(안쪽)으로 wander 방향 전환 */
+      const inAngle = Math.atan2(-ddy, -ddx);
+      /* 완전 반전 대신 안쪽 방향과 블렌딩 */
+      p.wanderAngle = inAngle + (Math.random()-0.5) * 1.2;
+      /* 속도도 살짝 안쪽으로 */
+      p.vx += (-ddx/dd) * PS * 0.4;
+      p.vy += (-ddy/dd) * PS * 0.4;
     }
   });
 }
@@ -707,6 +822,95 @@ window.addEventListener('resize', ()=>{
   canvas.width=main.offsetWidth; canvas.height=main.offsetHeight;
   arenaX=canvas.width/2; arenaY=canvas.height/2;
 });
+
+/* ═══════════════ PARTICIPANT SAVE / LOAD ══════════════ */
+const P_KEY = 'pbbk_groups'; /* localStorage key */
+
+function pGetTA(){
+  return document.getElementById('players-input') ||
+         document.getElementById('players-ta');
+}
+function pLoad(){ try{ return JSON.parse(localStorage.getItem(P_KEY)||'[]'); }catch(e){ return []; } }
+function pSave(){ pOpenModal(); }  /* save button opens modal with save-form pre-focused */
+
+function pOpenModal(){
+  document.getElementById('plist-modal').style.display = 'flex';
+  document.getElementById('plist-name-input').focus();
+  pRenderList();
+}
+function pCloseModal(){
+  document.getElementById('plist-modal').style.display = 'none';
+}
+
+function pDoSave(){
+  const nameEl = document.getElementById('plist-name-input');
+  const groupName = nameEl.value.trim();
+  if(!groupName){ nameEl.focus(); return; }
+  const val = pGetTA().value.trim();
+  if(!val){ alert('참가자를 먼저 입력하세요.'); return; }
+  const groups = pLoad();
+  /* overwrite if same name */
+  const idx = groups.findIndex(g => g.name === groupName);
+  const entry = { name: groupName, value: val, saved: new Date().toLocaleDateString('ko-KR') };
+  if(idx >= 0) groups[idx] = entry; else groups.unshift(entry);
+  localStorage.setItem(P_KEY, JSON.stringify(groups));
+  nameEl.value = '';
+  pRenderList();
+}
+
+function pRenderList(){
+  const scroll = document.getElementById('plist-scroll');
+  const groups = pLoad();
+  if(groups.length === 0){
+    scroll.innerHTML = '<div id="plist-empty">저장된 그룹이 없습니다</div>';
+    return;
+  }
+  scroll.innerHTML = groups.map((g, i) => `
+    <div class="plist-item" onclick="pSelect(${i})">
+      <div class="plist-item-info">
+        <div class="plist-item-name">${escHtml(g.name)}</div>
+        <div class="plist-item-preview">${escHtml(g.value.substring(0,50))}${g.value.length>50?'…':''}</div>
+      </div>
+      <button class="plist-item-del" title="삭제" onclick="event.stopPropagation();pDel(${i})">🗑</button>
+    </div>`).join('');
+}
+
+function pSelect(i){
+  const groups = pLoad();
+  if(!groups[i]) return;
+  pGetTA().value = groups[i].value;
+  pGetTA().dispatchEvent(new Event('input'));
+  pCloseModal();
+}
+
+function pDel(i){
+  const groups = pLoad();
+  groups.splice(i, 1);
+  localStorage.setItem(P_KEY, JSON.stringify(groups));
+  pRenderList();
+}
+
+function escHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 </script>
+
+<!-- participant save/load modal -->
+<div id="plist-modal" onclick="if(event.target===this)pCloseModal()">
+  <div id="plist-box">
+    <div id="plist-title">
+      📋 참가자 그룹
+      <button id="plist-close" onclick="pCloseModal()">×</button>
+    </div>
+    <div id="plist-save-row">
+      <input id="plist-name-input" placeholder="그룹 이름 입력 후 저장" maxlength="20">
+      <button id="plist-do-save" onclick="pDoSave()">저장</button>
+    </div>
+    <div id="plist-scroll">
+      <div id="plist-empty">저장된 그룹이 없습니다</div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
