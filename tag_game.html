@@ -451,45 +451,45 @@ function updatePlayers(dt){
     let fx=0, fy=0;
     let threatened = false;
 
-    /* flee from nearby taggers */
+    /* flee from nearby taggers — 반응은 하되 속도 부스트 없음 */
     activeTaggers.forEach(tg => {
       const dx = p.x-tg.x, dy=p.y-tg.y;
       const d  = Math.sqrt(dx*dx+dy*dy)||1;
       if(d < FLEE_RADIUS){
         threatened = true;
-        const strength = (1-(d/FLEE_RADIUS)) * PS * 6;
+        /* strength: 거리에 비례하되 과도한 급가속 방지 */
+        const strength = (1-(d/FLEE_RADIUS)) * PS * 2.5;
         fx += (dx/d)*strength;
         fy += (dy/d)*strength;
       }
     });
 
-    /* wander: 위협 없을 때 wanderAngle 방향으로 계속 이동 */
+    /* wander: 위협 없을 때 wanderAngle 방향으로 배회 */
     if(!threatened){
-      /* 조금씩 방향 틀기 */
-      p.wanderAngle += (Math.random()-0.5) * 1.2 * dt * 60;
-      const wanderStr = PS * 1.8;
-      fx += Math.cos(p.wanderAngle) * wanderStr;
-      fy += Math.sin(p.wanderAngle) * wanderStr;
+      p.wanderAngle += (Math.random()-0.5) * 1.0 * dt * 60;
+      fx += Math.cos(p.wanderAngle) * PS * 1.2;
+      fy += Math.sin(p.wanderAngle) * PS * 1.2;
     }
 
     p.vx += fx * dt;
     p.vy += fy * dt;
 
-    /* speed cap */
+    /* 속도 상한: 위협/평상시 동일하게 PS로 고정 — 대시 없음 */
     const spd = Math.sqrt(p.vx*p.vx+p.vy*p.vy)||1;
-    const cap = threatened ? PS * 1.4 : PS;
-    if(spd > cap){ p.vx=p.vx/spd*cap; p.vy=p.vy/spd*cap; }
-    p.vx *= threatened ? 0.92 : 0.88;
-    p.vy *= threatened ? 0.92 : 0.88;
+    if(spd > PS){ p.vx=p.vx/spd*PS; p.vy=p.vy/spd*PS; }
+
+    /* 감속: 항상 동일한 마찰 */
+    p.vx *= 0.86;
+    p.vy *= 0.86;
 
     p.x += p.vx*dt;
     p.y += p.vy*dt;
     clampToArena(p, PLAYER_R);
 
-    /* 벽에 닿으면 wander 방향 반전 */
+    /* 벽 근처에서 wander 방향을 중앙 쪽으로 */
     const ddx=p.x-arenaX, ddy=p.y-arenaY;
-    if(Math.sqrt(ddx*ddx+ddy*ddy) > arenaR*0.85){
-      p.wanderAngle = Math.atan2(arenaY-p.y, arenaX-p.x) + (Math.random()-0.5)*0.8;
+    if(Math.sqrt(ddx*ddx+ddy*ddy) > arenaR*0.82){
+      p.wanderAngle = Math.atan2(arenaY-p.y, arenaX-p.x) + (Math.random()-0.5)*0.6;
     }
   });
 }
