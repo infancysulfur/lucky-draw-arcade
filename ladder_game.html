@@ -103,7 +103,7 @@
     #game{display:none;width:100%;height:100%;flex-direction:column}
 
     /* top name row */
-    #top-row{display:flex;justify-content:space-around;align-items:flex-end;padding:16px 24px 0;flex-shrink:0;gap:4px}
+    #top-row{display:flex;justify-content:space-between;align-items:flex-end;padding:16px 16px 0;flex-shrink:0;gap:6px}
     .pname{
       font-family:'Gmarket Sans',sans-serif;font-size:13px;font-weight:700;
       padding:6px 10px;border-radius:var(--r);border:1px solid var(--border);
@@ -121,7 +121,7 @@
     #ladder-canvas{flex:1;width:100%;display:block}
 
     /* bottom result row */
-    #bot-row{display:flex;justify-content:space-around;align-items:flex-start;padding:0 24px 12px;flex-shrink:0;gap:4px}
+    #bot-row{display:flex;justify-content:space-between;align-items:flex-start;padding:0 16px 12px;flex-shrink:0;gap:6px}
     .rname{
       font-family:'Gmarket Sans',sans-serif;font-size:12px;font-weight:700;
       padding:5px 8px;border-radius:var(--r);border:1px solid var(--border);
@@ -311,6 +311,7 @@ let lastTs    = null;
 
 /* layout constants — computed in buildLayout */
 let colW, rowH, topPad, botPad, sidePad;
+let colXArr = []; /* actual X positions read from DOM name cards */
 
 /* ═══════════════════════════════════════════
    SIDEBAR WIRING
@@ -406,20 +407,37 @@ function startGame(){
 
 /* ── layout ── */
 function buildLayout(){
-  const main = document.getElementById('main');
+  const main    = document.getElementById('main');
+  const canvasEl= document.getElementById('ladder-canvas');
+  const topRow  = document.getElementById('top-row');
+  const botRow  = document.getElementById('bot-row');
+
   canvas.width  = main.offsetWidth;
-  canvas.height = main.offsetHeight - 
-    document.getElementById('top-row').offsetHeight -
-    document.getElementById('bot-row').offsetHeight;
-  sidePad = Math.max(40, canvas.width * 0.06);
-  topPad  = 12;
-  botPad  = 12;
-  colW    = (canvas.width - sidePad*2) / (cols - 1 || 1);
-  ROWS    = Math.max(8, cols * 2 + 4);
-  rowH    = (canvas.height - topPad - botPad) / ROWS;
+  canvas.height = main.offsetHeight -
+    topRow.offsetHeight - botRow.offsetHeight;
+
+  topPad = 10;
+  botPad = 10;
+  ROWS   = Math.max(8, cols * 2 + 4);
+  rowH   = (canvas.height - topPad - botPad) / ROWS;
+
+  /* Read actual center X of each name card relative to canvas */
+  const canvasRect = canvasEl.getBoundingClientRect();
+  const cards = topRow.querySelectorAll('.pname');
+  colXArr = Array.from(cards).map(card => {
+    const r = card.getBoundingClientRect();
+    return (r.left + r.width / 2) - canvasRect.left;
+  });
+  /* fallback: if DOM not ready yet, use even spacing */
+  if(colXArr.length === 0 || colXArr.every(x => x <= 0)){
+    const sp = canvas.width * 0.08;
+    const cw = (canvas.width - sp*2) / (cols-1||1);
+    colXArr = Array.from({length:cols}, (_,i) => sp + i*cw);
+  }
+  colW = colXArr.length > 1 ? colXArr[1] - colXArr[0] : canvas.width / cols;
 }
 
-function colX(c){ return sidePad + c * colW; }
+function colX(c){ return colXArr[c] !== undefined ? colXArr[c] : 0; }
 function rowY(r){ return topPad  + r * rowH; }
 
 /* ── generate rungs ── */
@@ -496,8 +514,8 @@ function buildUI(){
     botRow.appendChild(el);
   });
 
-  /* recompute layout after DOM update */
-  setTimeout(() => {
+  /* recompute layout after DOM paints (two rAFs to be safe) */
+  requestAnimationFrame(() => requestAnimationFrame(() => {
     buildLayout();
     /* reset walker positions */
     walkers.forEach((w,i) => {
@@ -506,7 +524,8 @@ function buildUI(){
       w.targetX=colX(i); w.targetY=rowY(1);
       w.done=false; w.won=false; w.active=false;
     });
-  }, 0);
+    draw();
+  }));
 }
 
 /* ═══════════════════════════════════════════
@@ -642,8 +661,8 @@ function drawVerticals(){
     ctx.beginPath();
     ctx.moveTo(x, rowY(0));
     ctx.lineTo(x, rowY(ROWS));
-    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 4;
     ctx.stroke();
   }
 }
@@ -656,8 +675,8 @@ function drawRungs(){
     ctx.beginPath();
     ctx.moveTo(x1, y);
     ctx.lineTo(x2, y);
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+    ctx.lineWidth = 4;
     ctx.stroke();
   });
 }
@@ -787,8 +806,10 @@ function shuffle(arr){
 
 window.addEventListener('resize', () => {
   if(gameRunning || gameFinished){
-    buildLayout();
-    draw();
+    requestAnimationFrame(() => {
+      buildLayout();
+      draw();
+    });
   }
 });
 </script>

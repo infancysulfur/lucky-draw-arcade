@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🏃 술래잡기 모둠 — 뽑기 왕국</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Gmarket+Sans:wght@300;500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg:#0d0f1a; --bg2:#131628; --bg3:#1a1e35; --sb:#10121f;
+      --accent:#f5c842; --accent2:#ff6b35; --accent3:#4ecdc4;
+      --red:#e84040; --blue:#378ADD;
+      --text:#eeeef5; --muted:#8890b0; --faint:#4a5070;
+      --border:rgba(255,255,255,0.07); --r:12px; --rlg:16px;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{width:100%;height:100%;font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+    body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.35}
+    .blob{position:fixed;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0;animation:blobFloat 14s ease-in-out infinite alternate}
+    .b1{width:420px;height:420px;background:rgba(245,200,66,.07);top:-80px;right:-60px}
+    .b2{width:360px;height:360px;background:rgba(255,107,53,.06);bottom:60px;left:-80px;animation-delay:-6s}
+    .b3{width:260px;height:260px;background:rgba(78,205,196,.05);top:35%;left:35%;animation-delay:-10s}
+    @keyframes blobFloat{from{transform:translate(0,0)scale(1)}to{transform:translate(24px,16px)scale(1.07)}}
+
+    #app{position:relative;z-index:1;display:flex;width:100vw;height:100vh}
+
+    /* ── SIDEBAR ── */
+    #sidebar{width:256px;min-width:256px;height:100%;background:var(--sb);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+    .sb-nav{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
+    .back{display:flex;align-items:center;justify-content:center;width:30px;height:30px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:8px;color:var(--muted);text-decoration:none;font-size:14px;transition:all .15s}
+    .back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+    .sb-logo{font-family:'Gmarket Sans',sans-serif;font-size:13px;font-weight:700;color:var(--accent);text-decoration:none}
+    .sb-logo span{color:var(--muted);font-weight:300}
+    .sb-body{flex:1;overflow-y:auto;padding:20px 18px;display:flex;flex-direction:column;gap:18px}
+    .sb-body::-webkit-scrollbar{width:4px}
+    .sb-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:4px}
+    .title-block{display:flex;align-items:center;gap:10px}
+    .title-icon{font-size:26px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.5))}
+    .title-text{font-family:'Gmarket Sans',sans-serif;font-size:16px;font-weight:700}
+    .title-sub{font-size:11px;color:var(--muted);margin-top:1px}
+    .slabel{font-size:10px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px}
+    .sdiv{height:1px;background:var(--border)}
+    textarea{width:100%;font-size:12px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg3);color:var(--text);resize:none;line-height:1.6;font-family:'Noto Sans KR',sans-serif;transition:border-color .15s}
+    textarea:focus{outline:none;border-color:rgba(245,200,66,.4)}
+    textarea::placeholder{color:var(--faint)}
+    .hint{font-size:10px;color:var(--faint);margin-top:4px}
+    .nrow{display:flex;align-items:center;gap:8px}
+    .nrow label{font-size:12px;color:var(--muted);flex:1}
+    .ninput{width:64px;text-align:center;font-size:16px;font-weight:700;padding:6px 4px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg3);color:var(--accent);font-family:'Gmarket Sans',sans-serif;transition:border-color .15s}
+    .ninput:focus{outline:none;border-color:rgba(245,200,66,.4)}
+    .ninput::-webkit-inner-spin-button,.ninput::-webkit-outer-spin-button{opacity:1}
+    /* speed slider */
+    .srow{display:flex;align-items:center;gap:8px}
+    .sv{font-size:12px;font-weight:700;min-width:28px;text-align:right;color:var(--blue);font-family:'Gmarket Sans',sans-serif}
+    input[type=range]{flex:1;accent-color:var(--blue)}
+    /* preview pills */
+    .preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+    .ppill{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;text-align:center}
+    .ppill .pnum{font-family:'Gmarket Sans',sans-serif;font-size:22px;font-weight:700;color:var(--accent)}
+    .ppill .plbl{font-size:10px;color:var(--faint);margin-top:2px}
+    /* start btn */
+    #start-btn{width:100%;padding:12px;font-size:14px;font-weight:700;font-family:'Gmarket Sans',sans-serif;background:linear-gradient(135deg,#f5c842,#ff6b35);color:#0d0f1a;border:none;border-radius:var(--r);cursor:pointer;transition:opacity .15s,transform .1s}
+    #start-btn:hover{opacity:.88;transform:translateY(-1px)}
+    #start-btn:active{transform:translateY(0)}
+    .sb-foot{padding:0 18px 18px;flex-shrink:0;display:flex;flex-direction:column;gap:8px}
+    /* key hint */
+    .keyhint{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;font-size:11px;color:var(--muted)}
+    .kb{font-size:10px;font-weight:700;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:1px 6px;color:var(--text);font-family:'Gmarket Sans',sans-serif}
+
+    /* ── MAIN ── */
+    #main{flex:1;height:100%;position:relative;background:var(--bg2);overflow:hidden;display:flex;align-items:center;justify-content:center}
+    #game-canvas{display:block}
+
+    /* idle */
+    #idle{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;pointer-events:none}
+    .idle-icon{font-size:64px;filter:drop-shadow(0 8px 24px rgba(245,200,66,.25))}
+    .idle-title{font-family:'Gmarket Sans',sans-serif;font-size:20px;font-weight:700}
+    .idle-sub{font-size:13px;color:var(--muted)}
+
+    /* HUD */
+    #hud{position:absolute;top:16px;left:50%;transform:translateX(-50%);display:none;flex-direction:column;align-items:center;gap:6px;pointer-events:none}
+    #hud-bar{display:flex;align-items:center;gap:14px;background:rgba(13,15,26,.8);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:40px;padding:7px 20px;font-size:13px;color:var(--muted)}
+    .hud-item{display:flex;align-items:center;gap:5px}
+    .hud-num{font-family:'Gmarket Sans',sans-serif;font-size:18px;font-weight:700;color:var(--text)}
+    .hud-sep{color:var(--faint)}
+    #shrink-bar-wrap{width:200px;height:4px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden}
+    #shrink-bar{height:100%;background:linear-gradient(90deg,#4ecdc4,#f5c842);border-radius:4px;transition:width .1s linear}
+
+    /* result overlay */
+    #result-overlay{position:absolute;inset:0;background:rgba(5,7,18,.85);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;z-index:20;overflow-y:auto;padding:24px}
+    #result-box{background:var(--bg2);border:1px solid rgba(245,200,66,.2);border-radius:var(--rlg);padding:32px 40px;text-align:center;box-shadow:0 32px 80px rgba(0,0,0,.6);animation:popIn .35s cubic-bezier(.34,1.56,.64,1) both;min-width:340px;max-width:640px;width:100%}
+    @keyframes popIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+    .res-icon{font-size:48px;margin-bottom:8px}
+    .res-title{font-family:'Gmarket Sans',sans-serif;font-size:20px;font-weight:700;color:var(--accent);margin-bottom:20px}
+    .teams-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:24px;text-align:left}
+    .team-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+    .team-card-title{font-family:'Gmarket Sans',sans-serif;font-size:12px;font-weight:700;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+    .team-member{font-size:12px;color:var(--muted);padding:2px 0;line-height:1.5}
+    .res-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+    .btn-p{padding:10px 22px;font-size:13px;font-weight:700;font-family:'Gmarket Sans',sans-serif;background:linear-gradient(135deg,#f5c842,#ff6b35);color:#0d0f1a;border:none;border-radius:var(--r);cursor:pointer;transition:opacity .15s}
+    .btn-p:hover{opacity:.85}
+    .btn-s{padding:10px 18px;font-size:13px;font-weight:500;background:rgba(255,255,255,.06);color:var(--muted);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;transition:all .15s;font-family:'Noto Sans KR',sans-serif}
+    .btn-s:hover{background:rgba(255,255,255,.1);color:var(--text)}
+    .btn-green{background:rgba(62,207,142,.15);color:#3ecf8e;border-color:rgba(62,207,142,.3)}
+    .btn-green:hover{background:rgba(62,207,142,.25);color:#3ecf8e}
+  </style>
+</head>
+<body>
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+<div id="app">
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div class="sb-nav">
+    <a class="back" href="index.html">←</a>
+    <a class="sb-logo" href="index.html">🎲 뽑기왕국 <span>/ 술래잡기</span></a>
+  </div>
+  <div class="sb-body">
+    <div class="title-block">
+      <div class="title-icon">🏃</div>
+      <div><div class="title-text">술래잡기 모둠</div><div class="title-sub">도망쳐라! 잡혀야 모둠이 된다</div></div>
+    </div>
+    <div class="sdiv"></div>
+
+    <div>
+      <div class="slabel">참가자</div>
+      <textarea id="players-ta" rows="4" placeholder="쉼표로 구분&#10;예) 철수,영희,민준,수아">철수,영희,민준,수아,지호,현우,지수,민아</textarea>
+    </div>
+
+    <div>
+      <div class="slabel">모둠 개수</div>
+      <div class="nrow">
+        <label>모둠 수</label>
+        <input type="number" id="team-count" class="ninput" min="2" max="10" value="3">
+      </div>
+      <div class="hint" id="team-hint">2 ~ 참가자수-1 이하</div>
+    </div>
+
+    <div>
+      <div class="slabel">구성 미리보기</div>
+      <div class="preview-grid">
+        <div class="ppill"><div class="pnum" id="prev-players">8</div><div class="plbl">참가자</div></div>
+        <div class="ppill"><div class="pnum" id="prev-teams">3</div><div class="plbl">모둠</div></div>
+        <div class="ppill"><div class="pnum" id="prev-max">3</div><div class="plbl">최대 인원</div></div>
+        <div class="ppill"><div class="pnum" id="prev-min">2</div><div class="plbl">최소 인원</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="slabel">게임 속도</div>
+      <div class="srow">
+        <span style="font-size:11px;color:var(--faint)">느림</span>
+        <input type="range" id="speed-range" min="1" max="5" value="3" step="1">
+        <span style="font-size:11px;color:var(--faint)">빠름</span>
+        <span class="sv" id="speed-val">3</span>
+      </div>
+    </div>
+
+    <div class="keyhint"><span class="kb">SPACE</span><span>배속 (3×)</span></div>
+  </div>
+
+  <div class="sb-foot">
+    <button id="start-btn">🎮 게임 시작</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+  <div id="idle">
+    <div class="idle-icon">🏃</div>
+    <div class="idle-title">술래잡기 모둠 배정</div>
+    <div class="idle-sub">참가자와 모둠 수를 설정하고 게임을 시작하세요</div>
+  </div>
+  <canvas id="game-canvas"></canvas>
+  <div id="hud">
+    <div id="hud-bar">
+      <div class="hud-item">🏃 남은 참가자 <span class="hud-num" id="hud-remain">0</span></div>
+      <span class="hud-sep">·</span>
+      <div class="hud-item">🎯 모둠 <span class="hud-num" id="hud-teams">0</span></div>
+    </div>
+    <div id="shrink-bar-wrap"><div id="shrink-bar" style="width:100%"></div></div>
+  </div>
+  <div id="result-overlay" style="display:none">
+    <div id="result-box">
+      <div class="res-icon">🎉</div>
+      <div class="res-title">모둠 배정 완료!</div>
+      <div class="teams-grid" id="teams-grid"></div>
+      <div class="res-btns">
+        <button class="btn-p" id="replay-btn">🔄 다시 하기</button>
+        <button class="btn-s btn-green" id="excel-btn">📥 엑셀 다운로드</button>
+        <a href="index.html" class="btn-s">🏠 홈으로</a>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+/* ═══════════════ CONFIG & STATE ══════════════ */
+const TEAM_COLORS = [
+  '#f5c842','#ff6b35','#4ecdc4','#e84040','#378ADD',
+  '#a855f7','#3ecf8e','#f472b6','#fb923c','#34d399',
+];
+const PLAYER_COLOR = '#eeeef5';
+
+let speedLevel = 3;
+let spaceDown  = false;
+let gameRunning= false;
+let animId     = null;
+let lastTs     = null;
+
+/* game objects */
+let players  = []; /* {name,x,y,vx,vy,alive,teamIdx} */
+let taggers  = []; /* {teamIdx,x,y,vx,vy,count,quota,active,color,label} */
+
+/* arena */
+let arenaX, arenaY, arenaR, arenaMinR, arenaRTarget;
+const SHRINK_DURATION = 60; /* seconds until arena reaches min */
+let elapsed = 0;
+
+const canvas = document.getElementById('game-canvas');
+const ctx    = canvas.getContext('2d');
+
+/* result data */
+let teamResults = []; /* [{label,color,members:[name,...]}] */
+
+/* ═══════════════ SIDEBAR WIRING ══════════════ */
+function parsePlayers(){ return document.getElementById('players-ta').value.split(',').map(s=>s.trim()).filter(Boolean); }
+
+function updatePreview(){
+  const ps = parsePlayers().length;
+  const ts = Math.max(2, Math.min(ps-1, parseInt(document.getElementById('team-count').value)||2));
+  const maxQ = Math.ceil(ps/ts);
+  const minQ = Math.floor(ps/ts);
+  document.getElementById('prev-players').textContent = ps;
+  document.getElementById('prev-teams').textContent   = ts;
+  document.getElementById('prev-max').textContent     = maxQ;
+  document.getElementById('prev-min').textContent     = minQ;
+  document.getElementById('team-hint').textContent    = `2 ~ ${Math.max(2,ps-1)} 이하`;
+  document.getElementById('team-count').max = Math.max(2, ps-1);
+}
+
+document.getElementById('players-ta').addEventListener('input', updatePreview);
+document.getElementById('team-count').addEventListener('input', updatePreview);
+document.getElementById('speed-range').addEventListener('input', e => {
+  speedLevel = parseInt(e.target.value);
+  document.getElementById('speed-val').textContent = speedLevel;
+});
+updatePreview();
+
+/* ═══════════════ KEYBOARD ══════════════ */
+document.addEventListener('keydown', e => { if(e.code==='Space'){ e.preventDefault(); spaceDown=true; } });
+document.addEventListener('keyup',   e => { if(e.code==='Space') spaceDown=false; });
+
+/* ═══════════════ START ══════════════ */
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('replay-btn').addEventListener('click', () => {
+  document.getElementById('result-overlay').style.display='none';
+  startGame();
+});
+
+function startGame(){
+  const names = parsePlayers();
+  if(names.length < 2){ alert('참가자를 2명 이상 입력하세요.'); return; }
+  const numTeams = Math.max(2, Math.min(names.length-1, parseInt(document.getElementById('team-count').value)||2));
+
+  document.getElementById('idle').style.display = 'none';
+  document.getElementById('hud').style.display  = 'flex';
+  document.getElementById('result-overlay').style.display = 'none';
+
+  /* canvas size */
+  const main = document.getElementById('main');
+  canvas.width  = main.offsetWidth;
+  canvas.height = main.offsetHeight;
+
+  /* arena */
+  arenaX = canvas.width/2;
+  arenaY = canvas.height/2;
+  arenaR = Math.min(canvas.width, canvas.height) * 0.44;
+  arenaMinR = Math.min(canvas.width, canvas.height) * 0.18;
+  arenaRTarget = arenaR;
+  elapsed = 0;
+
+  /* compute quotas */
+  const quotas = computeQuotas(names.length, numTeams);
+
+  /* place taggers */
+  taggers = quotas.map((q,i) => {
+    const angle = (i/numTeams)*Math.PI*2;
+    const r     = arenaR * 0.5;
+    return {
+      teamIdx: i,
+      x: arenaX + Math.cos(angle)*r,
+      y: arenaY + Math.sin(angle)*r,
+      vx: 0, vy: 0,
+      count: 0,
+      quota: q,
+      active: true,
+      color: TEAM_COLORS[i % TEAM_COLORS.length],
+      label: `모둠${i+1}`,
+      members: [],
+    };
+  });
+
+  /* place players randomly inside arena */
+  const shuffled = shuffle([...names]);
+  players = shuffled.map(name => {
+    const a = Math.random()*Math.PI*2;
+    const r = Math.random() * arenaR * 0.7;
+    return {
+      name, alive: true, teamIdx: -1,
+      x: arenaX + Math.cos(a)*r,
+      y: arenaY + Math.sin(a)*r,
+      vx: (Math.random()-0.5)*2,
+      vy: (Math.random()-0.5)*2,
+    };
+  });
+
+  teamResults = [];
+  gameRunning = true;
+  lastTs = null;
+  spaceDown = false;
+  if(animId) cancelAnimationFrame(animId);
+  animId = requestAnimationFrame(gameLoop);
+}
+
+/* ═══════════════ QUOTA CALC ══════════════ */
+function computeQuotas(n, t){
+  const base    = Math.floor(n/t);
+  const extras  = n % t;
+  return Array.from({length:t}, (_,i) => i < extras ? base+1 : base);
+}
+
+/* ═══════════════ GAME LOOP ══════════════ */
+function gameLoop(ts){
+  if(!gameRunning) return;
+  if(!lastTs) lastTs = ts;
+  const rawDt = Math.min((ts-lastTs)/1000, 0.08);
+  lastTs = ts;
+  const mult = spaceDown ? 3 : 1;
+  const speedMult = 0.6 + speedLevel * 0.3;
+  const dt = rawDt * mult * speedMult;
+
+  elapsed += rawDt * mult;
+
+  /* shrink arena */
+  const shrinkRatio = Math.max(0, 1 - elapsed/SHRINK_DURATION);
+  arenaR = arenaMinR + (arenaRTarget - arenaMinR) * shrinkRatio;
+
+  updateTaggers(dt);
+  updatePlayers(dt);
+  checkCaptures();
+
+  /* HUD */
+  const alive = players.filter(p=>p.alive).length;
+  const activeT = taggers.filter(t=>t.active).length;
+  document.getElementById('hud-remain').textContent = alive;
+  document.getElementById('hud-teams').textContent  = activeT;
+  document.getElementById('shrink-bar').style.width  = (shrinkRatio*100).toFixed(1)+'%';
+
+  draw();
+
+  if(alive===0) { endGame(); return; }
+  animId = requestAnimationFrame(gameLoop);
+}
+
+/* ═══════════════ PHYSICS ══════════════ */
+const TAGGER_SPEED = 90;
+const PLAYER_SPEED = 80;
+const FLEE_RADIUS  = 120;
+const CAPTURE_R    = 18;
+const TAGGER_R     = 14;
+const PLAYER_R     = 12;
+
+function updateTaggers(dt){
+  const alivePlayers = players.filter(p=>p.alive);
+  taggers.forEach(tg => {
+    if(!tg.active) return;
+
+    /* find nearest alive player */
+    let best = null, bestD = Infinity;
+    alivePlayers.forEach(p => {
+      const d = dist(tg.x,tg.y,p.x,p.y);
+      if(d < bestD){ bestD=d; best=p; }
+    });
+
+    if(best){
+      const dx = best.x - tg.x;
+      const dy = best.y - tg.y;
+      const d  = Math.sqrt(dx*dx+dy*dy)||1;
+      tg.vx += (dx/d)*TAGGER_SPEED*3*dt;
+      tg.vy += (dy/d)*TAGGER_SPEED*3*dt;
+    }
+
+    /* damping */
+    const spd = Math.sqrt(tg.vx*tg.vx+tg.vy*tg.vy)||1;
+    if(spd > TAGGER_SPEED){ tg.vx=tg.vx/spd*TAGGER_SPEED; tg.vy=tg.vy/spd*TAGGER_SPEED; }
+
+    tg.x += tg.vx*dt;
+    tg.y += tg.vy*dt;
+    clampToArena(tg, TAGGER_R);
+  });
+}
+
+function updatePlayers(dt){
+  const activeTaggers = taggers.filter(t=>t.active);
+  players.forEach(p => {
+    if(!p.alive) return;
+
+    /* flee from nearby taggers */
+    let fx=0, fy=0;
+    activeTaggers.forEach(tg => {
+      const dx = p.x-tg.x, dy=p.y-tg.y;
+      const d  = Math.sqrt(dx*dx+dy*dy)||1;
+      if(d < FLEE_RADIUS){
+        const strength = (1-(d/FLEE_RADIUS))*PLAYER_SPEED*4;
+        fx += (dx/d)*strength;
+        fy += (dy/d)*strength;
+      }
+    });
+
+    /* random wander if no threat */
+    if(Math.abs(fx)<1 && Math.abs(fy)<1){
+      fx += (Math.random()-0.5)*40;
+      fy += (Math.random()-0.5)*40;
+    }
+
+    p.vx += fx*dt;
+    p.vy += fy*dt;
+
+    /* damping */
+    const spd = Math.sqrt(p.vx*p.vx+p.vy*p.vy)||1;
+    if(spd > PLAYER_SPEED){ p.vx=p.vx/spd*PLAYER_SPEED; p.vy=p.vy/spd*PLAYER_SPEED; }
+    p.vx *= 0.85; p.vy *= 0.85;
+
+    p.x += p.vx*dt;
+    p.y += p.vy*dt;
+    clampToArena(p, PLAYER_R);
+  });
+}
+
+function clampToArena(unit, r){
+  const dx = unit.x - arenaX;
+  const dy = unit.y - arenaY;
+  const d  = Math.sqrt(dx*dx+dy*dy);
+  if(d > arenaR - r){
+    const scale = (arenaR-r)/d;
+    unit.x = arenaX + dx*scale;
+    unit.y = arenaY + dy*scale;
+    /* bounce */
+    const nx = dx/d, ny = dy/d;
+    const dot = unit.vx*nx + unit.vy*ny;
+    if(dot > 0){ unit.vx -= 2*dot*nx; unit.vy -= 2*dot*ny; }
+  }
+}
+
+function checkCaptures(){
+  taggers.forEach(tg => {
+    if(!tg.active) return;
+    players.forEach(p => {
+      if(!p.alive) return;
+      if(dist(tg.x,tg.y,p.x,p.y) < CAPTURE_R + PLAYER_R){
+        /* capture */
+        p.alive = false;
+        p.teamIdx = tg.teamIdx;
+        tg.count++;
+        tg.members.push(p.name);
+        spawnCaptureParticles(p.x, p.y, tg.color);
+
+        /* check if tagger is full */
+        if(tg.count >= tg.quota) tg.active = false;
+      }
+    });
+  });
+}
+
+/* ═══════════════ PARTICLES ══════════════ */
+let particles = [];
+function spawnCaptureParticles(x, y, color){
+  for(let i=0;i<8;i++){
+    const a = Math.random()*Math.PI*2;
+    const s = 40+Math.random()*60;
+    particles.push({x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, color, life:1, maxLife:1});
+  }
+}
+
+/* ═══════════════ DRAW ══════════════ */
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  /* arena boundary */
+  ctx.save();
+  /* shrink warning when small */
+  const shrinkPct = (arenaR-arenaMinR)/(taggers.length>0 ? (Math.min(canvas.width,canvas.height)*0.44-arenaMinR) : 1);
+  const borderAlpha = shrinkPct < 0.3 ? 0.6+Math.sin(Date.now()/200)*0.4 : 0.3;
+  ctx.beginPath();
+  ctx.arc(arenaX, arenaY, arenaR, 0, Math.PI*2);
+  ctx.strokeStyle = `rgba(245,200,66,${borderAlpha})`;
+  ctx.lineWidth   = 2.5;
+  ctx.stroke();
+  /* arena fill */
+  ctx.globalAlpha = 0.06;
+  ctx.fillStyle   = '#4ecdc4';
+  ctx.fill();
+  ctx.restore();
+
+  /* particles */
+  particles = particles.filter(p => p.life > 0);
+  particles.forEach(p => {
+    p.life -= 0.04;
+    p.x += p.vx * 0.016;
+    p.y += p.vy * 0.016;
+    p.vx *= 0.9; p.vy *= 0.9;
+    ctx.save();
+    ctx.globalAlpha = p.life;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+    ctx.restore();
+  });
+
+  /* taggers */
+  taggers.forEach(tg => {
+    if(!tg.active) return;
+    drawUnit(tg.x, tg.y, TAGGER_R+2, tg.color, tg.label, tg.count+'/'+tg.quota, true);
+  });
+
+  /* players */
+  players.forEach(p => {
+    if(!p.alive) return;
+    drawUnit(p.x, p.y, PLAYER_R, PLAYER_COLOR, p.name, '', false);
+  });
+}
+
+function drawUnit(x, y, r, color, label, sub, isTeam){
+  ctx.save();
+
+  /* glow for tagger */
+  if(isTeam){
+    ctx.beginPath();
+    ctx.arc(x, y, r+8, 0, Math.PI*2);
+    ctx.fillStyle = color+'33';
+    ctx.fill();
+  }
+
+  /* body */
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fillStyle = isTeam ? color : 'rgba(26,30,53,0.9)';
+  ctx.shadowColor = color;
+  ctx.shadowBlur  = isTeam ? 14 : 6;
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = isTeam ? 0 : 1.5;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  /* label */
+  const fs = Math.max(8, Math.min(11, r*0.8));
+  ctx.font = `700 ${fs}px 'Noto Sans KR', sans-serif`;
+  ctx.fillStyle = isTeam ? '#0d0f1a' : color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const shortLabel = label.length > 3 ? label.substring(0,3) : label;
+  ctx.fillText(shortLabel, x, sub ? y-3 : y);
+
+  /* sub (count) */
+  if(sub){
+    ctx.font = `600 ${fs-1}px 'Gmarket Sans', sans-serif`;
+    ctx.fillStyle = '#0d0f1a';
+    ctx.fillText(sub, x, y+fs);
+  }
+
+  ctx.restore();
+}
+
+/* ═══════════════ END GAME ══════════════ */
+function endGame(){
+  gameRunning = false;
+
+  /* collect results */
+  teamResults = taggers.map(tg => ({
+    label: tg.label,
+    color: tg.color,
+    members: tg.members,
+  }));
+
+  buildResultUI();
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('result-overlay').style.display = 'flex';
+}
+
+function buildResultUI(){
+  const grid = document.getElementById('teams-grid');
+  grid.innerHTML = '';
+  teamResults.forEach(team => {
+    const card = document.createElement('div');
+    card.className = 'team-card';
+    card.style.borderColor = team.color+'55';
+    card.innerHTML = `<div class="team-card-title" style="color:${team.color}">${team.label} (${team.members.length}명)</div>`
+      + team.members.map(m=>`<div class="team-member">• ${m}</div>`).join('');
+    grid.appendChild(card);
+  });
+}
+
+/* ═══════════════ EXCEL DOWNLOAD ══════════════ */
+document.getElementById('excel-btn').addEventListener('click', downloadExcel);
+
+function downloadExcel(){
+  const wb = XLSX.utils.book_new();
+
+  /* Sheet 1: 모둠별 명단 */
+  const maxLen = Math.max(...teamResults.map(t=>t.members.length));
+  const headers = teamResults.map(t=>t.label);
+  const rows = [headers];
+  for(let i=0;i<maxLen;i++){
+    rows.push(teamResults.map(t=> t.members[i] || ''));
+  }
+  const ws1 = XLSX.utils.aoa_to_sheet(rows);
+  /* column widths */
+  ws1['!cols'] = teamResults.map(()=>({wch:14}));
+  XLSX.utils.book_append_sheet(wb, ws1, '모둠별 명단');
+
+  /* Sheet 2: 참가자-모둠 매핑 */
+  const mapRows = [['참가자','모둠']];
+  teamResults.forEach(team => {
+    team.members.forEach(m => mapRows.push([m, team.label]));
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(mapRows);
+  ws2['!cols'] = [{wch:16},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws2, '참가자 배정표');
+
+  XLSX.writeFile(wb, '모둠배정결과.xlsx');
+}
+
+/* ═══════════════ UTILS ══════════════ */
+function dist(x1,y1,x2,y2){ const dx=x2-x1,dy=y2-y1; return Math.sqrt(dx*dx+dy*dy); }
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+  return arr;
+}
+
+window.addEventListener('resize', ()=>{
+  if(!gameRunning) return;
+  const main=document.getElementById('main');
+  canvas.width=main.offsetWidth; canvas.height=main.offsetHeight;
+  arenaX=canvas.width/2; arenaY=canvas.height/2;
+});
+</script>
+</body>
+</html>
