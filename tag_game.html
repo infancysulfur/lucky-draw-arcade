@@ -149,12 +149,12 @@
     </div>
 
     <div>
-      <div class="slabel">게임 속도</div>
+      <div class="slabel">모둠 유닛 속도</div>
       <div class="srow">
         <span style="font-size:11px;color:var(--faint)">느림</span>
-        <input type="range" id="speed-range" min="1" max="5" value="3" step="1">
+        <input type="range" id="speed-range" min="1" max="10" value="5" step="1">
         <span style="font-size:11px;color:var(--faint)">빠름</span>
-        <span class="sv" id="speed-val">3</span>
+        <span class="sv" id="speed-val">5</span>
       </div>
     </div>
 
@@ -226,7 +226,7 @@ const TEAM_COLORS = [
 ];
 const PLAYER_COLOR = '#eeeef5';
 
-let speedLevel       = 3;
+let speedLevel       = 5;
 let playerSpeedLevel = 5;   /* 참가자 속도 (1~10) */
 let shrinkLevel      = 5;   /* 원 축소 속도 (1~10) */
 let spaceDown        = false;
@@ -311,7 +311,7 @@ function startGame(){
   arenaX = canvas.width/2;
   arenaY = canvas.height/2;
   arenaR = Math.min(canvas.width, canvas.height) * 0.48;
-  arenaMinR = Math.min(canvas.width, canvas.height) * 0.16;
+  arenaMinR = 0;  /* 최소 없음 — 완전히 사라질 때까지 축소 */
   arenaRTarget = arenaR;
   elapsed = 0;
 
@@ -402,11 +402,11 @@ function gameLoop(ts){
 }
 
 /* ═══════════════ PHYSICS ══════════════ */
-const TAGGER_SPEED = 100;
 const FLEE_RADIUS  = 130;
 const CAPTURE_R    = 18;
 const TAGGER_R     = 14;
 const PLAYER_R     = 12;
+function getTaggerSpeed(){ return 60 + speedLevel * 16; }  /* 1=76, 10=220 */
 function getPlayerSpeed(){ return 80 + playerSpeedLevel * 14; }  /* 1=94, 10=220 */
 
 function updateTaggers(dt){
@@ -425,13 +425,15 @@ function updateTaggers(dt){
       const dx = best.x - tg.x;
       const dy = best.y - tg.y;
       const d  = Math.sqrt(dx*dx+dy*dy)||1;
-      tg.vx += (dx/d)*TAGGER_SPEED*3*dt;
-      tg.vy += (dy/d)*TAGGER_SPEED*3*dt;
+      const TS = getTaggerSpeed();
+      tg.vx += (dx/d)*TS*3*dt;
+      tg.vy += (dy/d)*TS*3*dt;
     }
 
     /* damping */
     const spd = Math.sqrt(tg.vx*tg.vx+tg.vy*tg.vy)||1;
-    if(spd > TAGGER_SPEED){ tg.vx=tg.vx/spd*TAGGER_SPEED; tg.vy=tg.vy/spd*TAGGER_SPEED; }
+    const TS2 = getTaggerSpeed();
+    if(spd > TS2){ tg.vx=tg.vx/spd*TS2; tg.vy=tg.vy/spd*TS2; }
 
     tg.x += tg.vx*dt;
     tg.y += tg.vy*dt;
@@ -495,9 +497,10 @@ function updatePlayers(dt){
 function clampToArena(unit, r){
   const dx = unit.x - arenaX;
   const dy = unit.y - arenaY;
-  const d  = Math.sqrt(dx*dx+dy*dy);
-  if(d > arenaR - r){
-    const scale = (arenaR-r)/d;
+  const d  = Math.sqrt(dx*dx+dy*dy)||0.001;
+  const effectiveR = Math.max(r*0.5, arenaR - r);
+  if(d > effectiveR){
+    const scale = effectiveR/d;
     unit.x = arenaX + dx*scale;
     unit.y = arenaY + dy*scale;
     /* bounce */
@@ -544,7 +547,8 @@ function draw(){
   /* arena boundary */
   ctx.save();
   /* shrink warning when small */
-  const shrinkPct = (arenaR-arenaMinR)/(taggers.length>0 ? (Math.min(canvas.width,canvas.height)*0.48-arenaMinR) : 1);
+  const _arenaMax = Math.min(canvas.width,canvas.height)*0.48;
+  const shrinkPct = _arenaMax > 0 ? arenaR / _arenaMax : 0;
   const borderAlpha = shrinkPct < 0.3 ? 0.6+Math.sin(Date.now()/200)*0.4 : 0.3;
   ctx.beginPath();
   ctx.arc(arenaX, arenaY, arenaR, 0, Math.PI*2);
