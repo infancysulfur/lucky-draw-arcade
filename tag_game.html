@@ -499,15 +499,104 @@ function gameLoop(ts){
 }
 
 /* ═══════════════ PHYSICS ══════════════ */
-const FLEE_RADIUS  = 130;
-const CAPTURE_R    = 18;
-const TAGGER_R     = 14;
-const PLAYER_R     = 12;
+const FLEE_RADIUS  = 30;
+const CAPTURE_R    = 10;
+const TAGGER_R     = 30;
+const PLAYER_R     = 25;
 function getTaggerSpeed(){ return 60 + speedLevel * 16; }  /* 1=76, 10=220 */
 function getPlayerSpeed(){ return 80 + playerSpeedLevel * 14; }  /* 1=94, 10=220 */
 
+/* ═══════════════ PHYSICS ENHANCEMENT ══════════════ */
+
+// 1. 두 원의 물리적 충돌 및 겹침 해결 함수
+function resolveCollision(a, b, radiusA, radiusB) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const minDict = radiusA + radiusB;
+
+  if (distance < minDict && distance > 0) {
+    // A. 겹침 강제 분리 (Static Resolution)
+    const overlap = minDict - distance;
+    const nx = dx / distance; // 정규화된 방향 벡터 (Normal)
+    const ny = dy / distance;
+    
+    // 서로 반대 방향으로 겹친 만큼 밀어냄
+    const moveX = nx * overlap / 2;
+    const moveY = ny * overlap / 2;
+    
+    a.x -= moveX;
+    a.y -= moveY;
+    b.x += moveX;
+    b.y += moveY;
+
+    // B. 충돌 반응 (Elastic Collision - 속도 변화)
+    // 상대 속도 계산
+    const rvx = b.vx - a.vx;
+    const rvy = b.vy - a.vy;
+
+    // 충돌 법선 방향의 상대 속도 (내적)
+    const velAlongNormal = rvx * nx + rvy * ny;
+
+    // 이미 멀어지고 있다면 처리를 스킵
+    if (velAlongNormal > 0) return;
+
+    // 반발 계수 (1: 완전 탄성 충돌, 0.5: 에너지 손실 있음)
+    const restitution = 0.7; 
+    let j = -(1 + restitution) * velAlongNormal;
+    j /= (1 / 1 + 1 / 1); // 질량이 동일하다고 가정 (1:1)
+
+    // 충격량 적용
+    const impulseX = j * nx;
+    const impulseY = j * ny;
+
+    a.vx -= impulseX;
+    a.vy -= impulseY;
+    b.vx += impulseX;
+    b.vy += impulseY;
+  }
+}
+
+/* ═══════════════ GAME LOOP 수정 ══════════════ */
+
+// gameLoop 함수 내의 updatePlayers(dt) 호출 직후에 아래 로직을 추가하세요.
+function checkAllCollisions() {
+  // 1. Tagger끼리 충돌
+  for (let i = 0; i < taggers.length; i++) {
+    for (let j = i + 1; j < taggers.length; j++) {
+      if (taggers[i].active && taggers[j].active) {
+        resolveCollision(taggers[i], taggers[j], TAGGER_R, TAGGER_R);
+      }
+    }
+  }
+
+  // 2. Player끼리 충돌
+  for (let i = 0; i < players.length; i++) {
+    if (!players[i].alive) continue;
+    for (let j = i + 1; j < players.length; j++) {
+      if (players[j].alive) {
+        resolveCollision(players[i], players[j], PLAYER_R, PLAYER_R);
+      }
+    }
+  }
+
+  // 3. Tagger와 Player 사이의 물리적 충돌 (잡히기 직전 튕겨나감 방지용)
+  // ※ 주의: 잡기 판정(CAPTURE_R)보다 물리 반경을 약간 작게 설정해야 자연스럽게 잡힙니다.
+  taggers.forEach(tg => {
+    if (!tg.active) return;
+    players.forEach(p => {
+      if (!p.alive) return;
+      // 물리적 충돌은 시각적 반지름보다 약간 작게 적용 (자연스러운 겹침 유도 후 캡처)
+      resolveCollision(tg, p, TAGGER_R, PLAYER_R * 0.8);
+    });
+  });
+}
+
 function updateTaggers(dt){
   const alivePlayers = players.filter(p=>p.alive);
+  const SEP_TT = (TAGGER_R + 2) * 2.4;  /* tagger-tagger 최소 거리 */
+  const SEP_TP = TAGGER_R + PLAYER_R + 4; /* tagger-player 분리 (capture 판정 외) */
+
   taggers.forEach(tg => {
     if(!tg.active) return;
 
@@ -527,6 +616,18 @@ function updateTaggers(dt){
       tg.vy += (dy/d)*TS*3*dt;
     }
 
+    /* tagger-tagger 분리 반발력 */
+    taggers.forEach(other => {
+      if(other === tg || !other.active) return;
+      const dx = tg.x - other.x, dy = tg.y - other.y;
+      const d  = Math.sqrt(dx*dx+dy*dy)||0.01;
+      if(d < SEP_TT){
+        const force = ((SEP_TT - d) / SEP_TT) * 800;
+        tg.vx += (dx/d)*force*dt;
+        tg.vy += (dy/d)*force*dt;
+      }
+    });
+
     /* damping */
     const spd = Math.sqrt(tg.vx*tg.vx+tg.vy*tg.vy)||1;
     const TS2 = getTaggerSpeed();
@@ -541,6 +642,8 @@ function updateTaggers(dt){
 function updatePlayers(dt){
   const activeTaggers = taggers.filter(t=>t.active);
   const PS = getPlayerSpeed();
+  const SEP_PP = (PLAYER_R) * 2.6;   /* player-player 최소 거리 */
+  const SEP_PT = PLAYER_R + TAGGER_R + 2; /* player-tagger 물리 분리 */
 
   players.forEach(p => {
     if(!p.alive) return;
@@ -557,6 +660,24 @@ function updatePlayers(dt){
         const strength = (1 - d/FLEE_RADIUS) * PS * 2.8;
         fx += (dx/d) * strength;
         fy += (dy/d) * strength;
+      }
+      /* 물리 겹침 분리 (캡처 범위 이상으로 붙어도 밀어내기) */
+      if(d < SEP_PT){
+        const push = ((SEP_PT - d) / SEP_PT) * 600;
+        fx += (dx/d)*push;
+        fy += (dy/d)*push;
+      }
+    });
+
+    /* ── player-player 분리 반발력 ── */
+    players.forEach(other => {
+      if(other === p || !other.alive) return;
+      const dx = p.x - other.x, dy = p.y - other.y;
+      const d  = Math.sqrt(dx*dx+dy*dy)||0.01;
+      if(d < SEP_PP){
+        const push = ((SEP_PP - d) / SEP_PP) * 500;
+        fx += (dx/d)*push;
+        fy += (dy/d)*push;
       }
     });
 
@@ -597,7 +718,7 @@ function updatePlayers(dt){
     /* ── 벽 반응: 벽 가까이 오면 방향을 반전 ── */
     const ddx = p.x - arenaX, ddy = p.y - arenaY;
     const dd  = Math.sqrt(ddx*ddx + ddy*ddy);
-    if(dd > arenaR * 0.78){
+    if(dd > arenaR * 0.95){
       /* 벽 법선 방향(안쪽)으로 wander 방향 전환 */
       const inAngle = Math.atan2(-ddy, -ddx);
       /* 완전 반전 대신 안쪽 방향과 블렌딩 */
@@ -612,16 +733,29 @@ function updatePlayers(dt){
 function clampToArena(unit, r){
   const dx = unit.x - arenaX;
   const dy = unit.y - arenaY;
-  const d  = Math.sqrt(dx*dx+dy*dy)||0.001;
-  const effectiveR = Math.max(r*0.5, arenaR - r);
+  const d  = Math.sqrt(dx*dx + dy*dy) || 0.001;
+  
+  /* [수정 포인트] 
+     기존: arenaR - r (반지름만큼 안쪽에서 멈춤)
+     수정: arenaR (중심이 벽 선까지 닿음)
+  */
+  const effectiveR = arenaR+r; 
+
   if(d > effectiveR){
-    const scale = effectiveR/d;
-    unit.x = arenaX + dx*scale;
-    unit.y = arenaY + dy*scale;
-    /* bounce */
-    const nx = dx/d, ny = dy/d;
-    const dot = unit.vx*nx + unit.vy*ny;
-    if(dot > 0){ unit.vx -= 2*dot*nx; unit.vy -= 2*dot*ny; }
+    const scale = effectiveR / d;
+    unit.x = arenaX + dx * scale;
+    unit.y = arenaY + dy * scale;
+
+    /* 벽 반사 (Bounce) 로직 */
+    const nx = dx / d; 
+    const ny = dy / d;
+    const dot = unit.vx * nx + unit.vy * ny;
+    
+    if(dot > 0){ 
+      // 벽에 부딪힐 때 속도를 반전시킴 (0.8은 탄성 계수, 살짝 힘을 죽임)
+      unit.vx = (unit.vx - 2 * dot * nx) * 0.8; 
+      unit.vy = (unit.vy - 2 * dot * ny) * 0.8; 
+    }
   }
 }
 
@@ -708,7 +842,7 @@ function draw(){
 function drawUnit(x, y, r, color, label, sub, isTeam){
   ctx.save();
 
-  /* glow for tagger */
+  /* 1. 글로우 효과 (술래/Tagger 전용) */
   if(isTeam){
     ctx.beginPath();
     ctx.arc(x, y, r+8, 0, Math.PI*2);
@@ -716,7 +850,7 @@ function drawUnit(x, y, r, color, label, sub, isTeam){
     ctx.fill();
   }
 
-  /* body */
+  /* 2. 바디(원) 그리기 */
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI*2);
   ctx.fillStyle = isTeam ? color : 'rgba(26,30,53,0.9)';
@@ -728,20 +862,35 @@ function drawUnit(x, y, r, color, label, sub, isTeam){
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  /* label */
-  const fs = Math.max(8, Math.min(11, r*0.8));
-  ctx.font = `700 ${fs}px 'Noto Sans KR', sans-serif`;
+  /* 3. 폰트 사이즈 분기 설정 */
+  let mainFontSize;
+  let subFontSize;
+
+  if (isTeam) {
+    // 술래(Tagger)는 원이 작으므로 폰트도 조금 더 작게 (예: 10px)
+    mainFontSize = 20;
+    subFontSize = 15;
+  } else {
+    // 참가자(Player)는 원이 크므로 글자를 더 크게 (예: 14px)
+    mainFontSize = 40;
+    subFontSize = 0; // 참가자는 sub(숫자)를 표시하지 않음
+  }
+
+  /* 4. 메인 라벨 그리기 (이름 또는 모둠번호) */
+  ctx.font = `700 ${mainFontSize}px 'Noto Sans KR', sans-serif`;
   ctx.fillStyle = isTeam ? '#0d0f1a' : color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const shortLabel = label.length > 3 ? label.substring(0,3) : label;
-  ctx.fillText(shortLabel, x, sub ? y-3 : y);
+  
+  // 술래는 공간이 좁으므로 세 글자까지만 표시, 참가자는 전체 표시
+  const displayName = isTeam && label.length > 3 ? label.substring(0,3) : label;
+  ctx.fillText(displayName, x, sub ? y - 4 : y);
 
-  /* sub (count) */
-  if(sub){
-    ctx.font = `600 ${fs-1}px 'Gmarket Sans', sans-serif`;
+  /* 5. 서브 텍스트 그리기 (술래의 현재 인원수: 0/3 등) */
+  if(isTeam && sub){
+    ctx.font = `600 ${subFontSize}px 'Gmarket Sans', sans-serif`;
     ctx.fillStyle = '#0d0f1a';
-    ctx.fillText(sub, x, y+fs);
+    ctx.fillText(sub, x, y + 8);
   }
 
   ctx.restore();
