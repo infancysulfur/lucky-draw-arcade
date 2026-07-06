@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>교실 자리 배치 — 뽑기왕국</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Gmarket+Sans:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink:#20302c; --muted:#6d7d76; --cream:#fffaf0; --wall:#dcebbd;
+      --wood:#c9854f; --wood-dark:#8d5634; --green:#315f4a; --yellow:#ffd45c;
+      --coral:#ff745c; --mint:#5abfae; --panel:#fffdf7; --speed:1;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { min-height:100vh; font-family:'Noto Sans KR',sans-serif; color:var(--ink); background:#eef4df; }
+    button, textarea, input, select { font:inherit; }
+    button { cursor:pointer; }
+    .topbar {
+      height:60px; display:flex; align-items:center; gap:14px; padding:0 24px;
+      color:white; background:#162822; box-shadow:0 2px 12px #19342d30;
+    }
+    .back { width:36px; height:36px; display:grid; place-items:center; color:white; text-decoration:none; border-radius:10px; background:#ffffff12; }
+    .logo { color:white; text-decoration:none; font-family:'Gmarket Sans',sans-serif; font-weight:700; }
+    .logo b { color:var(--yellow); }
+    .topbar-note { margin-left:auto; color:#b8c9c2; font-size:12px; }
+    main { max-width:1440px; margin:auto; padding:24px; }
+    .screen { display:none; }
+    .screen.active { display:block; }
+
+    /* setup */
+    .setup-wrap { min-height:calc(100vh - 108px); display:grid; place-items:center; }
+    .setup-card { width:min(760px,100%); padding:36px; background:var(--panel); border:1px solid #d7dfc7; border-radius:24px; box-shadow:0 24px 70px #3b52231f; }
+    .eyebrow { color:#cc5e48; font-size:12px; font-weight:700; letter-spacing:.12em; }
+    h1 { margin-top:8px; font-family:'Gmarket Sans',sans-serif; font-size:38px; letter-spacing:-1.5px; }
+    .intro { margin-top:10px; color:var(--muted); line-height:1.7; }
+    .field-head { margin-top:28px; display:flex; align-items:center; justify-content:space-between; }
+    .field-head label { font-weight:700; }
+    #name-count { color:var(--muted); font-size:13px; }
+    textarea { width:100%; height:180px; margin-top:10px; resize:vertical; padding:16px; color:var(--ink); background:#fff; border:1px solid #ccd6bd; border-radius:14px; outline:none; line-height:1.7; }
+    textarea:focus { border-color:var(--mint); box-shadow:0 0 0 3px #5abfae20; }
+    .saved-row { display:flex; gap:8px; margin-top:10px; }
+    .saved-row select { flex:1; min-width:0; padding:10px 12px; border:1px solid #ccd6bd; border-radius:10px; background:white; color:var(--ink); }
+    .small-btn { padding:10px 14px; border:1px solid #ccd6bd; border-radius:10px; color:var(--ink); background:white; font-weight:700; }
+    .small-btn.wide { flex:1; }
+    .option-row { display:flex; align-items:center; gap:18px; margin-top:24px; padding:16px; border-radius:14px; background:#f4f2df; }
+    .option-row label { font-weight:700; white-space:nowrap; }
+    #chance { flex:1; accent-color:var(--coral); }
+    #chance-value { width:44px; text-align:right; color:#cc5e48; font-weight:700; }
+    .error { min-height:22px; margin-top:12px; color:#d3473e; font-size:13px; }
+    .start-btn { width:100%; padding:15px; border:0; border-radius:14px; color:white; background:var(--green); font-weight:700; font-size:17px; box-shadow:0 8px 0 #214434; transition:.15s; }
+    .start-btn:hover { transform:translateY(-2px); box-shadow:0 10px 0 #214434; }
+    .start-btn:active { transform:translateY(4px); box-shadow:0 4px 0 #214434; }
+
+    /* game layout */
+    .game-header { display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+    .game-header h2 { font-family:'Gmarket Sans',sans-serif; font-size:23px; }
+    .game-actions { margin-left:auto; display:flex; gap:8px; }
+    .game-actions button { padding:9px 13px; border:1px solid #bcc9aa; border-radius:10px; background:#fffdf7; font-weight:700; }
+    .layout { display:grid; grid-template-columns:minmax(940px,1fr) 250px; gap:16px; align-items:start; overflow-x:auto; }
+    .classroom {
+      position:relative; width:100%; min-width:940px; aspect-ratio:16/9; overflow:hidden;
+      border:8px solid #9ba979; border-radius:18px; background:linear-gradient(#dcebbd 0 25%,#efdfbc 25% 100%);
+      box-shadow:inset 0 0 45px #56673f26,0 16px 40px #4f642429;
+    }
+    .floor-lines { position:absolute; inset:25% 0 0; opacity:.2; background:repeating-linear-gradient(90deg,transparent 0 68px,#9c7648 69px 70px); }
+    .blackboard { position:absolute; left:25%; top:3%; width:48%; height:18%; padding-top:5.5%; color:#dbe9d8; text-align:center; font-family:'Gmarket Sans'; font-size:15px; letter-spacing:.18em; background:#315f4a; border:8px solid #a77545; box-shadow:0 6px 0 #70492d; }
+    .flag { position:absolute; left:47.5%; top:.6%; width:5%; height:3.8%; border:1px solid #aaa; background:linear-gradient(#fff 0 33%,#e04d4d 33% 66%,#3155a4 66%); }
+    .teacher-desk { position:absolute; left:6%; top:14%; width:14%; height:9%; border-radius:4px; background:var(--wood); border:4px solid var(--wood-dark); box-shadow:0 6px 0 #72442a; }
+    .teacher-desk::after { content:'교탁'; position:absolute; inset:0; display:grid; place-items:center; color:#5d3928; font-weight:700; font-size:12px; }
+    .cabinet { position:absolute; right:4%; top:3%; width:13%; height:18%; border:4px solid #91613f; background:repeating-linear-gradient(#d39a62 0 24%,#9c633b 25% 27%); }
+    .window { position:absolute; left:1%; top:2%; width:18%; height:9%; border:5px solid white; background:linear-gradient(150deg,#9cd9e4,#eafcff); box-shadow:inset 0 0 0 2px #a5c5c5; }
+    .window::after { content:''; position:absolute; left:48%; top:0; bottom:0; width:4px; background:white; }
+    .promise { position:absolute; left:1.5%; top:27%; width:14%; padding:7px 4px; text-align:center; color:#684e30; background:#fff3b8; border:3px solid #cb9e5b; font-size:11px; font-weight:700; transform:rotate(-1deg); }
+    .timetable { position:absolute; right:1.5%; top:27%; width:12%; padding:7px 4px; text-align:center; color:#315f4a; background:#fff; border:3px solid #6ca491; font-size:11px; font-weight:700; transform:rotate(1deg); }
+    .door { position:absolute; right:-1px; width:8%; height:15%; overflow:hidden; border:4px solid #815637; background:#665143; z-index:8; }
+    .front-door { top:34%; }
+    .back-door { bottom:4%; }
+    .door-label { position:absolute; top:-21px; right:4px; padding:2px 6px; color:white; background:#223b31; border-radius:4px; font-size:10px; white-space:nowrap; }
+    .door-panel { position:absolute; inset:0; display:grid; place-items:center; color:#69452f; font-size:18px; background:linear-gradient(90deg,#c68755,#e0aa70); border-left:6px solid #a16d47; transition:transform calc(.5s / var(--speed)) ease; }
+    .door.open .door-panel { transform:translateX(88%); }
+    #seats { position:absolute; inset:0; z-index:4; }
+    .seat { position:absolute; width:8.2%; height:9%; transform:translate(-50%,-50%); border:3px solid var(--wood-dark); border-radius:8px 8px 5px 5px; background:linear-gradient(#dc9c62 0 64%,#aa693e 65%); box-shadow:0 5px 0 #78482f,0 8px 8px #6f552d35; transition:transform .2s; }
+    .seat::after { content:''; position:absolute; left:17%; right:17%; bottom:-24%; height:23%; border:3px solid #835038; border-top:0; }
+    .seat-num { position:absolute; top:4px; left:6px; color:#74452d; font-size:9px; font-weight:700; }
+    .occupant { position:absolute; left:4%; right:4%; top:27%; overflow:hidden; text-align:center; text-overflow:ellipsis; white-space:nowrap; color:#263d32; background:#fff8dd; border-radius:5px; font-size:clamp(9px,1vw,13px); font-weight:700; box-shadow:0 1px 4px #51371d30; }
+    .seat.just-filled { animation:seatPop .45s ease; }
+    @keyframes seatPop { 50% { transform:translate(-50%,-50%) scale(1.18) rotate(-2deg); } }
+    .seat.spotlight { z-index:12; animation:spotlight .22s 4 alternate; box-shadow:0 0 0 7px #fff,0 0 35px 18px #ffd45ccc; }
+    @keyframes spotlight { to { transform:translate(-50%,-50%) scale(1.16); filter:brightness(1.25); } }
+    .actor { position:absolute; z-index:20; width:48px; height:48px; display:grid; place-items:center; border:3px solid white; border-radius:50% 50% 45% 45%; color:white; background:var(--coral); box-shadow:0 7px 14px #2e332d42; font-size:11px; font-weight:700; text-align:center; line-height:1.1; transition:left calc(.8s / var(--speed)) ease-in-out,top calc(.8s / var(--speed)) ease-in-out,transform .2s; }
+    .actor::before { content:'🙂'; position:absolute; top:-21px; font-size:24px; filter:drop-shadow(0 2px 1px white); }
+    .actor.dance-a { animation:wobble calc(.38s / var(--speed)) ease-in-out infinite alternate; }
+    .actor.dance-b { animation:hop calc(.48s / var(--speed)) ease-in-out infinite; }
+    .actor.dance-c { animation:spinWalk calc(.75s / var(--speed)) ease-in-out infinite; background:#9b6bd3; }
+    .actor.dance-d { animation:robotWalk calc(.42s / var(--speed)) steps(2) infinite; background:#4e9ab5; border-radius:8px; }
+    .actor.dance-e { animation:superstar calc(.65s / var(--speed)) ease-in-out infinite; background:#e5a72e; box-shadow:0 0 0 5px #ffd45c55,0 7px 18px #2e332d42; }
+    @keyframes wobble { from { transform:rotate(-9deg) translateY(0); } to { transform:rotate(9deg) translateY(-5px); } }
+    @keyframes hop { 0%,100% { transform:translateY(0) scale(1,1); } 45% { transform:translateY(-12px) scale(.94,1.06); } 70% { transform:translateY(1px) scale(1.08,.92); } }
+    @keyframes spinWalk { 0% { transform:rotate(0) scale(.9); } 55% { transform:rotate(200deg) scale(1.12); } 100% { transform:rotate(360deg) scale(.9); } }
+    @keyframes robotWalk { from { transform:translate(-4px,-3px) rotate(-5deg); } to { transform:translate(4px,1px) rotate(5deg); } }
+    @keyframes superstar { 0%,100% { transform:rotate(-7deg) scale(.95); } 50% { transform:rotate(7deg) scale(1.13); filter:brightness(1.25); } }
+    .actor.ejected { background:#6e88c9; animation:panic .2s 4; }
+    @keyframes panic { 50% { transform:rotate(14deg) translateY(-5px); } }
+    .fun-banner { position:absolute; left:50%; top:23%; z-index:35; max-width:70%; padding:9px 18px; opacity:0; pointer-events:none; transform:translate(-50%,-15px) scale(.8); color:#fff; background:#223b31eb; border:3px solid #fff; border-radius:999px; box-shadow:0 7px 18px #1d302b55; font-family:'Gmarket Sans'; font-size:14px; text-align:center; transition:.18s; }
+    .fun-banner.show { opacity:1; transform:translate(-50%,0) scale(1); }
+    .fun-banner.danger { background:#d65343eb; animation:bannerPulse .25s 3 alternate; }
+    @keyframes bannerPulse { to { transform:translate(-50%,0) scale(1.1) rotate(-1deg); } }
+    .classroom.rumble { animation:roomRumble .12s 5; }
+    @keyframes roomRumble { 25% { transform:translate(-5px,2px); } 75% { transform:translate(5px,-2px); } }
+    .emoji-pop { position:absolute; z-index:40; pointer-events:none; font-size:22px; animation:emojiBurst .75s ease-out forwards; }
+    @keyframes emojiBurst { from { opacity:1; transform:translate(0,0) scale(.4) rotate(0); } to { opacity:0; transform:translate(var(--dx),var(--dy)) scale(1.25) rotate(var(--rot)); } }
+
+    /* side panel */
+    .side { min-width:250px; display:grid; gap:12px; }
+    .panel { padding:16px; border:1px solid #d1dac3; border-radius:15px; background:#fffdf7; box-shadow:0 8px 22px #52632c14; }
+    .panel-title { margin-bottom:10px; font-size:12px; color:var(--muted); font-weight:700; letter-spacing:.06em; }
+    .current { min-height:52px; display:flex; align-items:center; gap:10px; font-weight:700; }
+    .current-icon { width:38px; height:38px; display:grid; place-items:center; border-radius:50%; background:#ffe7a0; font-size:20px; }
+    .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .stat { padding:10px; border-radius:10px; background:#f0f4e6; }
+    .stat strong { display:block; color:var(--green); font-size:22px; }
+    .stat span { color:var(--muted); font-size:11px; }
+    .progress { height:8px; margin-top:12px; overflow:hidden; border-radius:99px; background:#e4ead8; }
+    #progress-bar { width:0; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--mint),var(--yellow)); transition:width .3s; }
+    #log { height:220px; overflow:auto; display:flex; flex-direction:column; gap:7px; font-size:12px; color:#56645e; }
+    .log-item { padding:7px 8px; border-radius:8px; background:#f4f5ed; }
+    .log-item.event { color:#a33e31; background:#fff0e8; font-weight:700; }
+
+    /* result */
+    .result-overlay { position:fixed; inset:0; z-index:100; display:none; place-items:center; padding:24px; background:#13221de8; }
+    .result-overlay.show { display:grid; }
+    .result-card { position:relative; width:min(720px,100%); max-height:90vh; overflow:auto; padding:32px; border-radius:22px; background:var(--cream); box-shadow:0 30px 80px #0008; }
+    .result-card h2 { font-family:'Gmarket Sans'; font-size:28px; }
+    .result-card>p { margin:7px 0 20px; color:var(--muted); }
+    .result-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(135px,1fr)); gap:8px; }
+    .result-item { display:flex; gap:8px; padding:9px 11px; border:1px solid #dae0cd; border-radius:9px; background:white; font-size:13px; }
+    .result-item b { color:#bb563f; }
+    .result-buttons { display:flex; gap:9px; margin-top:22px; }
+    .result-buttons button,.result-buttons a { flex:1; padding:12px; border:0; border-radius:11px; text-align:center; text-decoration:none; font-weight:700; }
+    .again { color:white; background:var(--green); }
+    .edit { color:var(--ink); background:#e4e9d8; }
+    .confetti { position:fixed; top:-20px; z-index:110; width:10px; height:16px; animation:fall 2.6s linear forwards; }
+    @keyframes fall { to { transform:translate(var(--drift),105vh) rotate(720deg); } }
+    @media (max-width:700px) { main{padding:14px}.setup-card{padding:24px}.topbar-note{display:none}.layout{grid-template-columns:minmax(940px,1fr) 240px}h1{font-size:29px} }
+    @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="back" href="index.html" aria-label="홈으로">←</a>
+    <a class="logo" href="index.html">🎲 <b>뽑기왕국</b> / 교실 자리 배치</a>
+    <span class="topbar-note">최대 23명 · 브라우저에서 바로 실행</span>
+  </header>
+
+  <main>
+    <section id="setup-screen" class="screen active setup-wrap">
+      <div class="setup-card">
+        <div class="eyebrow">LUCKY CLASSROOM</div>
+        <h1>오늘은 어디에 앉을까?</h1>
+        <p class="intro">학생 이름을 입력하면 앞문으로 한 명씩 들어와 자리를 찾습니다.<br>이미 주인이 있는 자리를 빼앗는 반전도 일어날 수 있어요.</p>
+        <div class="field-head"><label for="players-input">학생 명단</label><span id="name-count">0 / 23명</span></div>
+        <textarea id="players-input" placeholder="한 줄에 한 명 또는 쉼표로 구분&#10;예) 김민준&#10;이서연&#10;박지우"></textarea>
+        <div class="saved-row">
+          <input id="players-file" type="file" accept=".csv,text/csv" hidden>
+          <button id="load-group" class="small-btn wide" type="button">📂 참가자 명단 불러오기</button>
+          <button id="save-group" class="small-btn wide" type="button">💾 참가자 명단 저장</button>
+        </div>
+        <div class="option-row">
+          <label for="chance">자리 빼앗기 확률</label>
+          <input id="chance" type="range" min="0" max="80" step="10" value="40">
+          <span id="chance-value">40%</span>
+        </div>
+        <div class="field-head"><label for="layout-file">컴퓨터에 저장한 자리표</label><span>엑셀에서 열 수 있는 표 파일</span></div>
+        <div class="saved-row">
+          <input id="layout-file" type="file" accept=".csv,text/csv" hidden>
+          <button id="load-layout" class="small-btn" type="button">📂 저장한 자리표 불러오기</button>
+        </div>
+        <div id="setup-error" class="error" role="alert"></div>
+        <button id="start-btn" class="start-btn" type="button">자리 배치 시작</button>
+      </div>
+    </section>
+
+    <section id="game-screen" class="screen">
+      <div class="game-header">
+        <h2>🏫 우리 반 자리 배치</h2>
+        <div class="game-actions">
+          <button id="sound-btn" type="button">🔊 효과음</button>
+          <button id="speed-btn" type="button">⏩ 2배속</button>
+          <button id="restart-btn" type="button">처음부터</button>
+        </div>
+      </div>
+      <div class="layout">
+        <div id="classroom" class="classroom">
+          <div class="floor-lines"></div><div class="window"></div><div class="flag"></div>
+          <div class="blackboard">즐거운 우리 반</div><div id="teacher-desk" class="teacher-desk"></div><div class="cabinet"></div>
+          <div class="promise">우리반 약속<br>서로 배려하기</div><div class="timetable">시간표<br>국어 · 수학 · 체육</div>
+          <div id="front-door" class="door front-door"><span class="door-label">앞문 · 입장</span><div class="door-panel">🚪</div></div>
+          <div id="back-door" class="door back-door"><span class="door-label">뒷문 · 퇴장</span><div class="door-panel">🚪</div></div>
+          <div id="fun-banner" class="fun-banner" aria-live="polite"></div>
+          <div id="seats"></div>
+        </div>
+        <aside class="side">
+          <div class="panel"><div class="panel-title">지금 입장 중</div><div class="current"><div class="current-icon">👋</div><span id="current-name">잠시만 기다려 주세요</span></div></div>
+          <div class="panel">
+            <div class="stats"><div class="stat"><strong id="seated-count">0</strong><span>착석 완료</span></div><div class="stat"><strong id="queue-count">0</strong><span>대기 중</span></div></div>
+            <div class="progress"><div id="progress-bar"></div></div>
+          </div>
+          <div class="panel"><div class="panel-title">실시간 기록</div><div id="log" aria-live="polite"></div></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <div id="result-overlay" class="result-overlay" role="dialog" aria-modal="true" aria-labelledby="result-title">
+    <div class="result-card">
+      <h2 id="result-title">🎉 최종 자리 배치 완료!</h2>
+      <p>모든 학생이 자리를 찾았습니다.</p>
+      <div id="result-grid" class="result-grid"></div>
+      <div class="result-buttons"><button id="save-layout-btn" class="again">💾 컴퓨터에 자리표 저장</button><button id="again-btn" class="edit">다시 섞기</button><button id="edit-btn" class="edit">명단 수정</button></div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+    const MAX_SEATS=23;
+    const seatPositions=[
+      [72,34],[82,34],[72,46],[82,46],[72,58],[82,58],[72,70],[82,70],[77,82],
+      [43,36],[53,36],[43,49],[53,49],[43,62],[53,62],[43,75],[53,75],[48,86],
+      [20,40],[29,40],[20,56],[29,56],[24.5,72]
+    ];
+    const $=s=>document.querySelector(s);
+    const setupScreen=$('#setup-screen'), gameScreen=$('#game-screen'), input=$('#players-input');
+    const chance=$('#chance'), chanceValue=$('#chance-value'), errorBox=$('#setup-error');
+    let originalPlayers=[], queue=[], occupants=Array(MAX_SEATS).fill(null), ejections={}, running=false, speed=1, runToken=0;
+    let soundOn=true, audioContext=null, bannerTimer=null;
+
+    function parseNames(){ return input.value.split(/[\n,]+/).map(v=>v.trim()).filter(Boolean); }
+    function shuffle(items){
+      const a=[...items];
+      for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+      return a;
+    }
+    function wait(ms){ return new Promise(resolve=>setTimeout(resolve,ms/speed)); }
+    function ensureAudio(){
+      if(!soundOn) return null;
+      try{
+        if(!audioContext) audioContext=new (window.AudioContext||window.webkitAudioContext)();
+        if(audioContext.state==='suspended') audioContext.resume();
+        return audioContext;
+      }catch(_error){ soundOn=false; $('#sound-btn').textContent='🔇 효과음'; return null; }
+    }
+    function tone(frequency,duration,type='sine',delay=0,volume=.035){
+      const context=ensureAudio(); if(!context) return;
+      const oscillator=context.createOscillator(), gain=context.createGain(), start=context.currentTime+delay;
+      oscillator.type=type; oscillator.frequency.setValueAtTime(frequency,start);
+      gain.gain.setValueAtTime(0,start); gain.gain.linearRampToValueAtTime(volume,start+.015); gain.gain.exponentialRampToValueAtTime(.001,start+duration);
+      oscillator.connect(gain); gain.connect(context.destination); oscillator.start(start); oscillator.stop(start+duration+.03);
+    }
+    function playSound(kind){
+      if(kind==='knock'){ tone(150,.08,'square',0,.025); tone(130,.09,'square',.13,.025); }
+      else if(kind==='enter'){ tone(420,.1,'sine',0,.03); tone(620,.13,'sine',.1,.03); }
+      else if(kind==='seat'){ tone(720,.08,'triangle',0,.04); tone(920,.12,'triangle',.07,.03); }
+      else if(kind==='eject'){ tone(240,.18,'sawtooth',0,.035); tone(120,.28,'sawtooth',.13,.035); }
+      else if(kind==='finish'){ [523,659,784,1047].forEach((note,i)=>tone(note,.28,'triangle',i*.13,.035)); }
+    }
+    function showFun(message,danger=false,duration=1050){
+      const banner=$('#fun-banner'); clearTimeout(bannerTimer); banner.textContent=message; banner.classList.toggle('danger',danger); banner.classList.add('show');
+      bannerTimer=setTimeout(()=>banner.classList.remove('show'),duration/speed);
+    }
+    function showScreen(name){ setupScreen.classList.toggle('active',name==='setup'); gameScreen.classList.toggle('active',name==='game'); }
+    function updateInputCount(){
+      const count=parseNames().length;
+      $('#name-count').textContent=`${count} / ${MAX_SEATS}명`;
+      $('#name-count').style.color=count>MAX_SEATS?'#d3473e':'';
+    }
+    input.addEventListener('input',updateInputCount);
+    chance.addEventListener('input',()=>chanceValue.textContent=chance.value+'%');
+
+    function buildSeats(){
+      const wrap=$('#seats'); wrap.innerHTML='';
+      seatPositions.forEach(([x,y],i)=>{
+        const seat=document.createElement('div'); seat.className='seat'; seat.id=`seat-${i+1}`;
+        seat.style.left=x+'%'; seat.style.top=y+'%';
+        const num=document.createElement('span'); num.className='seat-num'; num.textContent=i+1;
+        const name=document.createElement('span'); name.className='occupant';
+        seat.append(num,name); wrap.appendChild(seat);
+      });
+    }
+
+    $('#load-group').addEventListener('click',()=>$('#players-file').click());
+    $('#players-file').addEventListener('change',loadPlayersFile);
+    $('#save-group').addEventListener('click',savePlayersFile);
+    $('#load-layout').addEventListener('click',()=>$('#layout-file').click());
+    $('#layout-file').addEventListener('change',loadLayoutFile);
+
+    function resetState(){ runToken++; queue=shuffle(originalPlayers); occupants=Array(MAX_SEATS).fill(null); ejections={}; running=true; speed=1; document.documentElement.style.setProperty('--speed',1); document.querySelectorAll('.door').forEach(d=>d.classList.remove('open')); document.querySelectorAll('.actor').forEach(a=>a.remove()); $('#speed-btn').textContent='⏩ 2배속'; $('#log').innerHTML=''; renderSeats(); updateStatus(); }
+    function startGame(){
+      const names=parseNames(); errorBox.textContent='';
+      if(!names.length){ errorBox.textContent='학생 이름을 한 명 이상 입력해 주세요.'; return; }
+      if(names.length>MAX_SEATS){ errorBox.textContent=`좌석은 ${MAX_SEATS}개입니다. ${names.length-MAX_SEATS}명을 줄여 주세요.`; return; }
+      ensureAudio(); originalPlayers=[...names]; resetState(); showScreen('game'); log(`${names.length}명의 자리 배치를 시작합니다.`); showFun('🏫 두근두근 자리 배치, 출발!'); processQueue();
+    }
+    $('#start-btn').addEventListener('click',startGame);
+    $('#sound-btn').addEventListener('click',()=>{ soundOn=!soundOn; $('#sound-btn').textContent=soundOn?'🔊 효과음':'🔇 효과음'; if(soundOn){ ensureAudio(); playSound('seat'); } });
+    $('#speed-btn').addEventListener('click',()=>{ speed=speed===1?2:1; document.documentElement.style.setProperty('--speed',speed); $('#speed-btn').textContent=speed===1?'⏩ 2배속':'▶️ 1배속'; });
+    $('#restart-btn').addEventListener('click',()=>{ if(!confirm('진행 중인 배치를 멈추고 명단 입력 화면으로 돌아갈까요?')) return; running=false; runToken++; document.querySelectorAll('.door').forEach(d=>d.classList.remove('open')); document.querySelectorAll('.actor').forEach(a=>a.remove()); showScreen('setup'); });
+    $('#again-btn').addEventListener('click',()=>{ $('#result-overlay').classList.remove('show'); resetState(); log('같은 명단으로 다시 시작합니다.'); processQueue(); });
+    $('#edit-btn').addEventListener('click',()=>{ running=false; runToken++; $('#result-overlay').classList.remove('show'); showScreen('setup'); });
+    $('#save-layout-btn').addEventListener('click',saveCurrentLayout);
+
+    function renderSeats(){
+      occupants.forEach((name,i)=>{ const label=$(`#seat-${i+1} .occupant`); if(label){ label.textContent=name||''; label.title=name||''; } });
+    }
+    function updateStatus(){
+      const seated=occupants.filter(Boolean).length;
+      $('#seated-count').textContent=seated; $('#queue-count').textContent=queue.length;
+      $('#progress-bar').style.width=(originalPlayers.length?seated/originalPlayers.length*100:0)+'%';
+    }
+    function log(message,event=false){
+      const item=document.createElement('div'); item.className='log-item'+(event?' event':''); item.textContent=message;
+      $('#log').prepend(item);
+    }
+    function pointFor(element){
+      const room=$('#classroom').getBoundingClientRect(), r=element.getBoundingClientRect();
+      return {left:r.left-room.left+r.width/2-24,top:r.top-room.top+r.height/2-24};
+    }
+    function makeActor(name,element,ejected=false){
+      const styles=[' dance-a',' dance-b',' dance-c',' dance-d',' dance-e'], dance=styles[Math.floor(Math.random()*styles.length)];
+      const actor=document.createElement('div'); actor.className='actor'+(ejected?' ejected':dance); actor.textContent=name; actor.title=name;
+      const p=pointFor(element); actor.style.left=p.left+'px'; actor.style.top=p.top+'px'; $('#classroom').appendChild(actor); return actor;
+    }
+    function moveActor(actor,element){ const p=pointFor(element); actor.style.left=p.left+'px'; actor.style.top=p.top+'px'; }
+    function emojiBurst(element,kind='seat'){
+      const room=$('#classroom'), p=pointFor(element), emojis=kind==='eject'?['😲','💥','↩️','❗']:['⭐','🎉','✨','👏','🌈'];
+      for(let i=0;i<9;i++){
+        const pop=document.createElement('span'); pop.className='emoji-pop'; pop.textContent=emojis[i%emojis.length]; pop.style.left=(p.left+16)+'px'; pop.style.top=(p.top+12)+'px';
+        const angle=Math.PI*2*i/9, distance=45+Math.random()*38; pop.style.setProperty('--dx',Math.cos(angle)*distance+'px'); pop.style.setProperty('--dy',Math.sin(angle)*distance+'px'); pop.style.setProperty('--rot',(Math.random()*180-90)+'deg');
+        room.appendChild(pop); setTimeout(()=>pop.remove(),900);
+      }
+    }
+    async function openDoor(door){ door.classList.add('open'); await wait(520); }
+    async function closeDoor(door){ door.classList.remove('open'); await wait(380); }
+
+    function chooseSeat(student){
+      const empty=occupants.map((v,i)=>v===null?i:-1).filter(i=>i>=0);
+      if(!empty.length) return {index:Math.floor(Math.random()*MAX_SEATS),eject:true};
+      if((ejections[student]||0)>=3) return {index:empty[Math.floor(Math.random()*empty.length)],eject:false,protected:true};
+      const candidate=Math.floor(Math.random()*MAX_SEATS);
+      if(occupants[candidate]===null) return {index:candidate,eject:false};
+      const old=occupants[candidate];
+      const canEject=(ejections[old]||0)<3;
+      if(canEject && Math.random()<Number(chance.value)/100) return {index:candidate,eject:true};
+      return {index:empty[Math.floor(Math.random()*empty.length)],eject:false};
+    }
+
+    async function enterStudent(student,token){
+      const door=$('#front-door'); $('#current-name').textContent=student; log(`${student} 학생이 앞문으로 들어옵니다.`);
+      playSound('knock'); showFun(`🚪 ${student}, 화려하게 등장!`);
+      await openDoor(door); if(!running||token!==runToken) return null;
+      const actor=makeActor(student,door); playSound('enter'); await wait(100); moveActor(actor,$('#teacher-desk'));
+      const moments=[`${student}, 선생님 눈치 보는 중... 👀`,`${student}, 로봇 모드 가동! 🤖`,`${student}, 오늘의 슈퍼스타! ⭐`,`복도에서는 사뿐사뿐! 🐾`,`${student}, 자리 레이더 작동 중... 📡`];
+      if(Math.random()<.34) showFun(moments[Math.floor(Math.random()*moments.length)]);
+      await wait(760); await closeDoor(door); return actor;
+    }
+    async function ejectStudent(name,seatIndex,token){
+      if(token!==runToken) return false;
+      const seat=$(`#seat-${seatIndex+1}`), door=$('#back-door'); occupants[seatIndex]=null; renderSeats();
+      ejections[name]=(ejections[name]||0)+1; log(`💥 ${name} 학생이 자리를 빼앗겼습니다!`,true);
+      playSound('eject'); showFun('🚨 반전! 자리의 주인이 바뀝니다!',true,1300); $('#classroom').classList.add('rumble'); setTimeout(()=>$('#classroom').classList.remove('rumble'),700); emojiBurst(seat,'eject');
+      const actor=makeActor(name,seat,true); await wait(650); await openDoor(door); moveActor(actor,door); await wait(800); actor.remove(); await closeDoor(door);
+      if(!running||token!==runToken) return false;
+      const position=Math.floor(Math.random()*(queue.length+1)); queue.splice(position,0,name); log(`${name} 학생이 대기열로 돌아갔습니다.`); updateStatus();
+      return true;
+    }
+    async function seatStudent(student,actor,index,token){
+      const seat=$(`#seat-${index+1}`); moveActor(actor,seat); await wait(850); if(!running){ actor.remove(); return; }
+      if(token!==runToken){ actor.remove(); return; }
+      actor.remove(); occupants[index]=student; renderSeats(); seat.classList.add('just-filled'); setTimeout(()=>seat.classList.remove('just-filled'),500);
+      playSound('seat'); emojiBurst(seat); showFun(`🎉 ${student}, ${index+1}번 자리 착석!`,false,850);
+      log(`${student} → ${index+1}번 자리`); updateStatus(); await wait(350);
+    }
+    function renderResultGrid(){
+      const grid=$('#result-grid'); grid.innerHTML='';
+      occupants.forEach((name,i)=>{ if(!name) return; const item=document.createElement('div'); item.className='result-item'; const number=document.createElement('b'); number.textContent=`${i+1}번`; const label=document.createElement('span'); label.textContent=name; item.append(number,label); grid.appendChild(item); });
+    }
+    function safeFileName(name){ return name.trim().replace(/[\\/:*?"<>|]/g,'_'); }
+    function localDate(){
+      const now=new Date(), pad=value=>String(value).padStart(2,'0');
+      return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+    }
+    function downloadCsv(fileName,rows){
+      const escapeCell=value=>'"'+String(value??'').replace(/"/g,'""')+'"';
+      const csv='\uFEFF'+rows.map(row=>row.map(escapeCell).join(',')).join('\r\n');
+      const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}), url=URL.createObjectURL(blob), link=document.createElement('a');
+      link.href=url; link.download=fileName; document.body.appendChild(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }
+    function savePlayersFile(){
+      const names=parseNames(); if(!names.length){ errorBox.textContent='저장할 학생 명단을 먼저 입력해 주세요.'; return; }
+      const groupName=prompt('참가자 명단 파일 이름을 입력하세요.','우리 반'); if(!groupName?.trim()) return;
+      downloadCsv(`${safeFileName(groupName)}_참가자명단_${localDate()}.csv`,[['학생 이름'],...names.map(name=>[name])]);
+      errorBox.textContent='참가자 명단 파일을 저장했습니다.';
+    }
+    async function loadPlayersFile(event){
+      const file=event.target.files?.[0]; if(!file) return;
+      try{
+        const rows=parseCsv(await file.text());
+        if(String(rows[0]?.[0]||'').trim()!=='학생 이름') throw new Error('잘못된 명단 형식');
+        const names=rows.slice(1).map(row=>String(row[0]||'').trim()).filter(Boolean);
+        if(!names.length) throw new Error('참가자 없음');
+        if(names.length>MAX_SEATS) throw new Error(`좌석은 ${MAX_SEATS}개인데 명단에 ${names.length}명이 있습니다.`);
+        input.value=names.join('\n'); updateInputCount(); errorBox.textContent=`${names.length}명의 참가자 명단을 불러왔습니다.`;
+      }catch(error){ errorBox.textContent=error.message.startsWith('좌석은')?error.message:'참가자 명단 파일을 읽지 못했습니다. 이 게임에서 저장한 파일인지 확인해 주세요.'; }
+      finally{ event.target.value=''; }
+    }
+    function saveCurrentLayout(){
+      if(!occupants.some(Boolean)) return;
+      const layoutName=prompt('자리표 파일 이름을 입력하세요.','우리 반'); if(!layoutName?.trim()) return;
+      const rows=[['좌석 번호','학생 이름'],...occupants.map((name,i)=>[i+1,name||''])];
+      downloadCsv(`${safeFileName(layoutName)}_자리표_${localDate()}.csv`,rows);
+      $('#save-layout-btn').textContent='✓ 파일 저장 완료'; setTimeout(()=>$('#save-layout-btn').textContent='💾 컴퓨터에 자리표 저장',1400);
+    }
+    function parseCsv(text){
+      const rows=[]; let row=[], cell='', quoted=false;
+      text=String(text).replace(/^\uFEFF/,'');
+      for(let i=0;i<text.length;i++){
+        const char=text[i];
+        if(quoted){
+          if(char==='"'&&text[i+1]==='"'){ cell+='"'; i++; }
+          else if(char==='"') quoted=false;
+          else cell+=char;
+        }else if(char==='"') quoted=true;
+        else if(char===','){ row.push(cell); cell=''; }
+        else if(char==='\n'){ row.push(cell.replace(/\r$/,'')); rows.push(row); row=[]; cell=''; }
+        else cell+=char;
+      }
+      if(cell||row.length){ row.push(cell.replace(/\r$/,'')); rows.push(row); }
+      return rows;
+    }
+    async function loadLayoutFile(event){
+      const file=event.target.files?.[0]; if(!file) return;
+      try{
+        const rows=parseCsv(await file.text());
+        if(String(rows[0]?.[0]||'').trim()!=='좌석 번호'||String(rows[0]?.[1]||'').trim()!=='학생 이름') throw new Error('잘못된 자리표 형식');
+        const loaded=Array(MAX_SEATS).fill(null);
+        for(const row of rows.slice(1)){
+          const seat=Number(String(row[0]||'').trim()), name=String(row[1]||'').trim();
+          if(Number.isInteger(seat)&&seat>=1&&seat<=MAX_SEATS&&name) loaded[seat-1]=name;
+        }
+        if(!loaded.some(Boolean)) throw new Error('자리 정보 없음');
+        restoreLayout({name:file.name.replace(/\.csv$/i,''),occupants:loaded}); errorBox.textContent='';
+      }catch(_error){ errorBox.textContent='자리표 파일을 읽지 못했습니다. 이 게임에서 저장한 파일인지 확인해 주세요.'; }
+      finally{ event.target.value=''; }
+    }
+    function restoreLayout(layout){
+      runToken++; running=false; queue=[]; ejections={};
+      occupants=Array.from({length:MAX_SEATS},(_v,i)=>typeof layout.occupants?.[i]==='string'?layout.occupants[i]:null);
+      originalPlayers=occupants.filter(Boolean); input.value=originalPlayers.join('\n'); updateInputCount();
+      showScreen('game'); renderSeats(); updateStatus(); $('#current-name').textContent=`${layout.name} 불러옴`; $('#log').innerHTML=''; log(`💾 ‘${layout.name}’ 저장 배치를 불러왔습니다.`,true);
+      renderResultGrid(); $('#result-overlay').classList.add('show');
+    }
+    async function processQueue(){
+      const token=runToken;
+      while(running && token===runToken && queue.length){
+        const student=queue.shift(); updateStatus(); const actor=await enterStudent(student,token); if(!running||token!==runToken||!actor){ actor?.remove(); break; }
+        const choice=chooseSeat(student);
+        const targetSeat=$(`#seat-${choice.index+1}`); targetSeat.classList.add('spotlight'); showFun(`🔍 운명의 자리는... ${choice.index+1}번?!`); await wait(520); targetSeat.classList.remove('spotlight');
+        if(choice.eject && occupants[choice.index]) await ejectStudent(occupants[choice.index],choice.index,token);
+        if(!running||token!==runToken){ actor.remove(); break; }
+        await seatStudent(student,actor,choice.index,token);
+      }
+      if(running && token===runToken && !queue.length && occupants.filter(Boolean).length===originalPlayers.length) finishGame();
+    }
+    function finishGame(){
+      running=false; playSound('finish'); showFun('🎊 우리 반 자리 배치 완성!',false,1800); $('#current-name').textContent='모두 착석 완료!'; updateStatus(); log('🎉 최종 자리 배치가 완료되었습니다!',true);
+      renderResultGrid();
+      setTimeout(()=>{ $('#result-overlay').classList.add('show'); confetti(); },500);
+    }
+    function confetti(){
+      const colors=['#ffd45c','#ff745c','#5abfae','#6e88c9','#ef8fc1'];
+      for(let i=0;i<70;i++){ const c=document.createElement('i'); c.className='confetti'; c.style.left=Math.random()*100+'vw'; c.style.background=colors[i%colors.length]; c.style.setProperty('--drift',(Math.random()*200-100)+'px'); c.style.animationDelay=Math.random()*.7+'s'; document.body.appendChild(c); setTimeout(()=>c.remove(),3500); }
+    }
+
+    buildSeats(); updateInputCount();
+  </script>
+</body>
+</html>
