@@ -58,7 +58,7 @@
     .game-header h2 { font-family:'Gmarket Sans',sans-serif; font-size:23px; }
     .game-actions { margin-left:auto; display:flex; gap:8px; }
     .game-actions button { padding:9px 13px; border:1px solid #bcc9aa; border-radius:10px; background:#fffdf7; font-weight:700; }
-    #editor-actions { display:none; margin-left:auto; gap:8px; }
+    #editor-actions { display:none; margin-left:auto; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
     #editor-actions button { padding:9px 13px; border:1px solid #bcc9aa; border-radius:10px; background:#fffdf7; font-weight:700; }
     #editor-seat-count { min-width:54px; display:grid; place-items:center; color:var(--green); background:#fffdf7; border:1px solid #bcc9aa; border-radius:10px; font-weight:700; }
     #editor-done { color:white; background:var(--green)!important; border-color:var(--green)!important; }
@@ -68,6 +68,8 @@
     #game-screen.editing .side { display:none; }
     #game-screen.editing .seat { cursor:grab; touch-action:none; box-shadow:0 5px 0 #78482f,0 0 0 3px #fff8; }
     #game-screen.editing .seat:active { cursor:grabbing; z-index:50; filter:brightness(1.15); }
+    #game-screen.editing .seat.group-selected { z-index:15; box-shadow:0 5px 0 #78482f,0 0 0 6px #43d4c2,0 0 24px #43d4c2aa; }
+    .selection-box { position:absolute; z-index:60; display:none; pointer-events:none; border:2px solid #168f81; background:#43d4c238; box-shadow:0 0 0 1px #fff inset; }
     .layout { display:grid; grid-template-columns:minmax(940px,1fr) 250px; gap:16px; align-items:start; overflow-x:auto; }
     .classroom {
       position:relative; width:100%; min-width:940px; aspect-ratio:16/9; overflow:hidden;
@@ -216,6 +218,7 @@
           <button id="remove-desk" type="button">− 책상</button>
           <span id="editor-seat-count">23개</span>
           <button id="add-desk" type="button">+ 책상</button>
+          <button id="clear-selection" type="button">선택 해제</button>
           <button id="save-desk-layout" type="button">💾 배치 저장</button>
           <button id="load-desk-layout-editor" type="button">📂 배치 불러오기</button>
           <button id="auto-layout" type="button">↺ 자동 정렬</button>
@@ -230,6 +233,7 @@
           <div id="front-door" class="door front-door"><span class="door-label">앞문 · 입장</span><div class="door-panel">🚪</div></div>
           <div id="back-door" class="door back-door"><span class="door-label">뒷문 · 퇴장</span><div class="door-panel">🚪</div></div>
           <div id="fun-banner" class="fun-banner" aria-live="polite"></div>
+          <div id="selection-box" class="selection-box"></div>
           <div id="seats"></div>
         </div>
         <aside class="side">
@@ -259,7 +263,7 @@
     const $=s=>document.querySelector(s);
     const setupScreen=$('#setup-screen'), gameScreen=$('#game-screen'), input=$('#players-input');
     const chance=$('#chance'), chanceValue=$('#chance-value'), errorBox=$('#setup-error');
-    let seatCount=DEFAULT_SEATS, seatPositions=[], customPositions=null, originalPlayers=[], queue=[], occupants=Array(seatCount).fill(null), ejections={}, running=false, speed=1, runToken=0;
+    let seatCount=DEFAULT_SEATS, seatPositions=[], customPositions=null, selectedSeats=new Set(), originalPlayers=[], queue=[], occupants=Array(seatCount).fill(null), ejections={}, running=false, speed=1, runToken=0;
     let soundOn=true, audioContext=null, bannerTimer=null;
 
     function parseNames(){ return input.value.split(/[\n,]+/).map(v=>v.trim()).filter(Boolean); }
@@ -351,11 +355,12 @@
     }
     function buildSeats(){
       const wrap=$('#seats'); wrap.innerHTML='';
+      selectedSeats=new Set([...selectedSeats].filter(index=>index<seatCount));
       const layout=makeSeatPositions(seatCount);
       const positions=customPositions?.length===seatCount?customPositions:layout.positions;
       seatPositions=positions.map(position=>[...position]);
       seatPositions.forEach(([x,y],i)=>{
-        const seat=document.createElement('div'); seat.className='seat'; seat.id=`seat-${i+1}`;
+        const seat=document.createElement('div'); seat.className='seat'+(selectedSeats.has(i)?' group-selected':''); seat.id=`seat-${i+1}`;
         seat.style.left=x+'%'; seat.style.top=y+'%'; seat.style.width=Math.min(8.2,58/layout.columns)+'%';
         const num=document.createElement('span'); num.className='seat-num'; num.textContent=i+1;
         const name=document.createElement('span'); name.className='occupant';
@@ -363,20 +368,45 @@
       });
       $('#editor-seat-count').textContent=`${seatCount}개`;
     }
+    function refreshDeskSelection(){
+      document.querySelectorAll('.seat').forEach((seat,index)=>seat.classList.toggle('group-selected',selectedSeats.has(index)));
+    }
+    function clearDeskSelection(){ selectedSeats.clear(); refreshDeskSelection(); }
     function beginSeatDrag(event,index,seat){
       if(!gameScreen.classList.contains('editing')) return;
-      event.preventDefault(); seat.setPointerCapture(event.pointerId);
+      event.preventDefault(); event.stopPropagation(); seat.setPointerCapture(event.pointerId);
+      if(!selectedSeats.has(index)){ selectedSeats=new Set([index]); refreshDeskSelection(); }
       if(!customPositions?.length) customPositions=seatPositions.map(position=>[...position]);
+      const room=$('#classroom').getBoundingClientRect(), startX=event.clientX, startY=event.clientY, indices=[...selectedSeats];
+      const starts=new Map(indices.map(seatIndex=>[seatIndex,[...seatPositions[seatIndex]]]));
       const move=moveEvent=>{
-        const room=$('#classroom').getBoundingClientRect();
-        const x=Math.max(5,Math.min(91,(moveEvent.clientX-room.left)/room.width*100));
-        const y=Math.max(30,Math.min(90,(moveEvent.clientY-room.top)/room.height*100));
-        customPositions[index]=[Number(x.toFixed(2)),Number(y.toFixed(2))]; seatPositions[index]=[...customPositions[index]];
-        seat.style.left=x+'%'; seat.style.top=y+'%';
+        const rawDx=(moveEvent.clientX-startX)/room.width*100, rawDy=(moveEvent.clientY-startY)/room.height*100;
+        const startValues=[...starts.values()], minX=Math.min(...startValues.map(position=>position[0])), maxX=Math.max(...startValues.map(position=>position[0]));
+        const minY=Math.min(...startValues.map(position=>position[1])), maxY=Math.max(...startValues.map(position=>position[1]));
+        const dx=Math.max(5-minX,Math.min(91-maxX,rawDx)), dy=Math.max(30-minY,Math.min(90-maxY,rawDy));
+        indices.forEach(seatIndex=>{
+          const origin=starts.get(seatIndex), position=[Number((origin[0]+dx).toFixed(2)),Number((origin[1]+dy).toFixed(2))];
+          customPositions[seatIndex]=position; seatPositions[seatIndex]=[...position];
+          const element=$(`#seat-${seatIndex+1}`); element.style.left=position[0]+'%'; element.style.top=position[1]+'%';
+        });
       };
       const end=()=>{ seat.removeEventListener('pointermove',move); seat.removeEventListener('pointerup',end); seat.removeEventListener('pointercancel',end); };
       seat.addEventListener('pointermove',move); seat.addEventListener('pointerup',end); seat.addEventListener('pointercancel',end);
     }
+    function beginMarqueeSelection(event){
+      if(!gameScreen.classList.contains('editing')||event.target.closest('.seat')) return;
+      event.preventDefault(); const room=$('#classroom'), bounds=room.getBoundingClientRect(), box=$('#selection-box'); room.setPointerCapture(event.pointerId);
+      const startX=Math.max(bounds.left,Math.min(bounds.right,event.clientX)), startY=Math.max(bounds.top,Math.min(bounds.bottom,event.clientY)); let moved=false;
+      const move=moveEvent=>{
+        const currentX=Math.max(bounds.left,Math.min(bounds.right,moveEvent.clientX)), currentY=Math.max(bounds.top,Math.min(bounds.bottom,moveEvent.clientY));
+        const left=Math.min(startX,currentX), top=Math.min(startY,currentY), right=Math.max(startX,currentX), bottom=Math.max(startY,currentY); moved=moved||Math.abs(currentX-startX)>4||Math.abs(currentY-startY)>4;
+        box.style.display='block'; box.style.left=(left-bounds.left)+'px'; box.style.top=(top-bounds.top)+'px'; box.style.width=(right-left)+'px'; box.style.height=(bottom-top)+'px';
+        selectedSeats.clear(); document.querySelectorAll('.seat').forEach((element,index)=>{ const rect=element.getBoundingClientRect(); if(rect.right>=left&&rect.left<=right&&rect.bottom>=top&&rect.top<=bottom) selectedSeats.add(index); }); refreshDeskSelection();
+      };
+      const end=()=>{ if(!moved) clearDeskSelection(); box.style.display='none'; room.removeEventListener('pointermove',move); room.removeEventListener('pointerup',end); room.removeEventListener('pointercancel',end); };
+      room.addEventListener('pointermove',move); room.addEventListener('pointerup',end); room.addEventListener('pointercancel',end);
+    }
+    $('#classroom').addEventListener('pointerdown',beginMarqueeSelection);
 
     $('#load-group').addEventListener('click',()=>$('#players-file').click());
     $('#players-file').addEventListener('change',loadPlayersFile);
@@ -391,13 +421,13 @@
       const requestedSeats=Math.max(1,Math.min(MAX_SEATS,Number($('#seat-count').value)||DEFAULT_SEATS));
       if(requestedSeats!==seatCount) resizeSeatLayout(requestedSeats); $('#seat-count').value=seatCount;
       if(names.length!==seatCount){ errorBox.textContent=`학생은 ${names.length}명, 좌석은 ${seatCount}개입니다. 학생 수와 좌석 수를 같게 맞춰 주세요.`; return; }
-      gameScreen.classList.remove('editing'); $('#game-title').textContent='🏫 우리 반 자리 배치'; buildSeats(); ensureAudio(); originalPlayers=[...names]; resetState(); showScreen('game'); log(`${names.length}명 · ${seatCount}석 자리 배치를 시작합니다.`); showFun('🏫 두근두근 자리 배치, 출발!'); processQueue();
+      selectedSeats.clear(); gameScreen.classList.remove('editing'); $('#game-title').textContent='🏫 우리 반 자리 배치'; buildSeats(); ensureAudio(); originalPlayers=[...names]; resetState(); showScreen('game'); log(`${names.length}명 · ${seatCount}석 자리 배치를 시작합니다.`); showFun('🏫 두근두근 자리 배치, 출발!'); processQueue();
     }
     $('#start-btn').addEventListener('click',startGame);
     $('#edit-layout').addEventListener('click',()=>{
       const requestedSeats=Math.max(1,Math.min(MAX_SEATS,Number($('#seat-count').value)||DEFAULT_SEATS));
       if(requestedSeats!==seatCount) resizeSeatLayout(requestedSeats); $('#seat-count').value=seatCount;
-      occupants=Array(seatCount).fill(null); buildSeats(); showScreen('game'); gameScreen.classList.add('editing'); $('#game-title').textContent='🪑 책상을 마우스로 옮겨 주세요'; showFun('책상을 잡아서 원하는 위치로 드래그하세요!',false,2200);
+      selectedSeats.clear(); occupants=Array(seatCount).fill(null); buildSeats(); showScreen('game'); gameScreen.classList.add('editing'); $('#game-title').textContent='🪑 책상을 마우스로 옮겨 주세요'; showFun('빈 바닥을 드래그하면 여러 책상을 한꺼번에 선택할 수 있어요!',false,2600);
     });
     $('#load-desk-layout').addEventListener('click',()=>$('#desk-layout-file').click());
     $('#load-desk-layout-editor').addEventListener('click',()=>$('#desk-layout-file').click());
@@ -405,8 +435,9 @@
     $('#save-desk-layout').addEventListener('click',saveDeskLayoutFile);
     $('#remove-desk').addEventListener('click',()=>{ if(seatCount>1) applySeatCount(seatCount-1); else showFun('책상은 최소 1개가 필요합니다.',true); });
     $('#add-desk').addEventListener('click',()=>{ if(seatCount<MAX_SEATS) applySeatCount(seatCount+1); else showFun(`책상은 최대 ${MAX_SEATS}개까지 가능합니다.`,true); });
+    $('#clear-selection').addEventListener('click',()=>{ clearDeskSelection(); showFun('책상 선택을 해제했습니다.'); });
     $('#auto-layout').addEventListener('click',()=>{ customPositions=null; buildSeats(); showFun('↺ 책상을 자동으로 정렬했습니다.'); });
-    $('#editor-done').addEventListener('click',()=>{ gameScreen.classList.remove('editing'); $('#game-title').textContent='🏫 우리 반 자리 배치'; showScreen('setup'); errorBox.textContent=`${seatCount}개 책상 배치를 적용했습니다.`; });
+    $('#editor-done').addEventListener('click',()=>{ clearDeskSelection(); gameScreen.classList.remove('editing'); $('#game-title').textContent='🏫 우리 반 자리 배치'; showScreen('setup'); errorBox.textContent=`${seatCount}개 책상 배치를 적용했습니다.`; });
     $('#sound-btn').addEventListener('click',()=>{ soundOn=!soundOn; $('#sound-btn').textContent=soundOn?'🔊 효과음':'🔇 효과음'; if(soundOn){ ensureAudio(); playSound('seat'); } });
     $('#speed-btn').addEventListener('click',()=>{ speed=speed===3?1:speed+1; document.documentElement.style.setProperty('--speed',speed); $('#speed-btn').textContent=`⏩ 현재 ${speed}배속`; });
     $('#restart-btn').addEventListener('click',()=>{ if(!confirm('진행 중인 배치를 멈추고 명단 입력 화면으로 돌아갈까요?')) return; running=false; runToken++; gameScreen.classList.remove('editing'); document.querySelectorAll('.door').forEach(d=>d.classList.remove('open')); document.querySelectorAll('.actor').forEach(a=>a.remove()); showScreen('setup'); });
@@ -588,7 +619,7 @@
           fileSeatCount=Math.max(fileSeatCount,number); positions[number-1]=[x,y];
         }
         if(!fileSeatCount||positions.filter(Boolean).length!==fileSeatCount) throw new Error('누락된 책상');
-        seatCount=fileSeatCount; $('#seat-count').value=seatCount; customPositions=positions.map(position=>[...position]); occupants=Array(seatCount).fill(null);
+        seatCount=fileSeatCount; $('#seat-count').value=seatCount; customPositions=positions.map(position=>[...position]); selectedSeats.clear(); occupants=Array(seatCount).fill(null);
         buildSeats(); showScreen('game'); gameScreen.classList.add('editing'); $('#game-title').textContent='🪑 불러온 책상 배치를 확인해 주세요'; showFun(`📂 ${seatCount}개 책상 배치를 불러왔습니다!`,false,1800); errorBox.textContent=''; updateInputCount();
       }catch(_error){
         const message='책상 배치 파일을 읽지 못했습니다. 이 게임에서 저장한 배치 파일인지 확인해 주세요.'; errorBox.textContent=message;
@@ -634,7 +665,7 @@
     function restoreLayout(layout){
       runToken++; running=false; queue=[]; ejections={};
       seatCount=Math.max(1,Math.min(MAX_SEATS,layout.occupants?.length||DEFAULT_SEATS)); $('#seat-count').value=seatCount;
-      customPositions=Array.isArray(layout.positions)&&layout.positions.length===seatCount?layout.positions.map(position=>[...position]):null; buildSeats();
+      customPositions=Array.isArray(layout.positions)&&layout.positions.length===seatCount?layout.positions.map(position=>[...position]):null; selectedSeats.clear(); buildSeats();
       occupants=Array.from({length:seatCount},(_v,i)=>typeof layout.occupants?.[i]==='string'&&layout.occupants[i]?layout.occupants[i]:null);
       originalPlayers=occupants.filter(Boolean); input.value=originalPlayers.join('\n'); updateInputCount();
       gameScreen.classList.remove('editing'); $('#game-title').textContent='🏫 우리 반 자리 배치'; showScreen('game'); renderSeats(); updateStatus(); $('#current-name').textContent=`${layout.name} 불러옴`; $('#log').innerHTML=''; log(`💾 ‘${layout.name}’ 저장 배치를 불러왔습니다.`,true);
