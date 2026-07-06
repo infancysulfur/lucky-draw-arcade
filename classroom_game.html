@@ -47,6 +47,7 @@
     .option-row label { font-weight:700; white-space:nowrap; }
     #chance { flex:1; accent-color:var(--coral); }
     #chance-value { width:44px; text-align:right; color:#cc5e48; font-weight:700; }
+    #seat-count { width:90px; margin-left:auto; padding:8px 10px; border:1px solid #ccd6bd; border-radius:9px; color:var(--ink); background:white; text-align:center; font-weight:700; }
     .error { min-height:22px; margin-top:12px; color:#d3473e; font-size:13px; }
     .start-btn { width:100%; padding:15px; border:0; border-radius:14px; color:white; background:var(--green); font-weight:700; font-size:17px; box-shadow:0 8px 0 #214434; transition:.15s; }
     .start-btn:hover { transform:translateY(-2px); box-shadow:0 10px 0 #214434; }
@@ -57,6 +58,15 @@
     .game-header h2 { font-family:'Gmarket Sans',sans-serif; font-size:23px; }
     .game-actions { margin-left:auto; display:flex; gap:8px; }
     .game-actions button { padding:9px 13px; border:1px solid #bcc9aa; border-radius:10px; background:#fffdf7; font-weight:700; }
+    #editor-actions { display:none; margin-left:auto; gap:8px; }
+    #editor-actions button { padding:9px 13px; border:1px solid #bcc9aa; border-radius:10px; background:#fffdf7; font-weight:700; }
+    #editor-done { color:white; background:var(--green)!important; border-color:var(--green)!important; }
+    #game-screen.editing .game-actions { display:none; }
+    #game-screen.editing #editor-actions { display:flex; }
+    #game-screen.editing .layout { grid-template-columns:minmax(940px,1fr); }
+    #game-screen.editing .side { display:none; }
+    #game-screen.editing .seat { cursor:grab; touch-action:none; box-shadow:0 5px 0 #78482f,0 0 0 3px #fff8; }
+    #game-screen.editing .seat:active { cursor:grabbing; z-index:50; filter:brightness(1.15); }
     .layout { display:grid; grid-template-columns:minmax(940px,1fr) 250px; gap:16px; align-items:start; overflow-x:auto; }
     .classroom {
       position:relative; width:100%; min-width:940px; aspect-ratio:16/9; overflow:hidden;
@@ -150,7 +160,7 @@
   <header class="topbar">
     <a class="back" href="index.html" aria-label="홈으로">←</a>
     <a class="logo" href="index.html">🎲 <b>뽑기왕국</b> / 교실 자리 배치</a>
-    <span class="topbar-note">최대 23명 · 브라우저에서 바로 실행</span>
+    <span class="topbar-note">좌석 수 설정 가능 · 최대 40명</span>
   </header>
 
   <main>
@@ -166,6 +176,12 @@
           <button id="load-group" class="small-btn wide" type="button">📂 참가자 명단 불러오기</button>
           <button id="save-group" class="small-btn wide" type="button">💾 참가자 명단 저장</button>
         </div>
+        <div class="option-row">
+          <label for="seat-count">교실 좌석 수</label>
+          <span>학급 인원에 맞게 책상이 자동 배치됩니다</span>
+          <input id="seat-count" type="number" min="1" max="40" value="23">
+        </div>
+        <div class="saved-row"><button id="edit-layout" class="small-btn wide" type="button">🪑 책상 배치 직접 편집</button></div>
         <div class="option-row">
           <label for="chance">자리 빼앗기 확률</label>
           <input id="chance" type="range" min="0" max="80" step="10" value="40">
@@ -183,11 +199,15 @@
 
     <section id="game-screen" class="screen">
       <div class="game-header">
-        <h2>🏫 우리 반 자리 배치</h2>
+        <h2 id="game-title">🏫 우리 반 자리 배치</h2>
         <div class="game-actions">
           <button id="sound-btn" type="button">🔊 효과음</button>
-          <button id="speed-btn" type="button">⏩ 2배속</button>
+          <button id="speed-btn" type="button">⏩ 현재 1배속</button>
           <button id="restart-btn" type="button">처음부터</button>
+        </div>
+        <div id="editor-actions">
+          <button id="auto-layout" type="button">↺ 자동 정렬</button>
+          <button id="editor-done" type="button">✓ 배치 완료</button>
         </div>
       </div>
       <div class="layout">
@@ -223,16 +243,11 @@
 
   <script>
     'use strict';
-    const MAX_SEATS=23;
-    const seatPositions=[
-      [72,34],[82,34],[72,46],[82,46],[72,58],[82,58],[72,70],[82,70],[77,82],
-      [43,36],[53,36],[43,49],[53,49],[43,62],[53,62],[43,75],[53,75],[48,86],
-      [20,40],[29,40],[20,56],[29,56],[24.5,72]
-    ];
+    const MAX_SEATS=40, DEFAULT_SEATS=23;
     const $=s=>document.querySelector(s);
     const setupScreen=$('#setup-screen'), gameScreen=$('#game-screen'), input=$('#players-input');
     const chance=$('#chance'), chanceValue=$('#chance-value'), errorBox=$('#setup-error');
-    let originalPlayers=[], queue=[], occupants=Array(MAX_SEATS).fill(null), ejections={}, running=false, speed=1, runToken=0;
+    let seatCount=DEFAULT_SEATS, seatPositions=[], customPositions=null, originalPlayers=[], queue=[], occupants=Array(seatCount).fill(null), ejections={}, running=false, speed=1, runToken=0;
     let soundOn=true, audioContext=null, bannerTimer=null;
 
     function parseNames(){ return input.value.split(/[\n,]+/).map(v=>v.trim()).filter(Boolean); }
@@ -271,21 +286,49 @@
     function showScreen(name){ setupScreen.classList.toggle('active',name==='setup'); gameScreen.classList.toggle('active',name==='game'); }
     function updateInputCount(){
       const count=parseNames().length;
-      $('#name-count').textContent=`${count} / ${MAX_SEATS}명`;
-      $('#name-count').style.color=count>MAX_SEATS?'#d3473e':'';
+      $('#name-count').textContent=`${count} / ${seatCount}명`;
+      $('#name-count').style.color=count>seatCount?'#d3473e':'';
     }
     input.addEventListener('input',updateInputCount);
+    $('#seat-count').addEventListener('input',()=>{ seatCount=Math.max(1,Math.min(MAX_SEATS,Number($('#seat-count').value)||DEFAULT_SEATS)); customPositions=null; updateInputCount(); });
     chance.addEventListener('input',()=>chanceValue.textContent=chance.value+'%');
 
+    function makeSeatPositions(count){
+      const columns=count<=12?4:count<=20?5:count<=30?6:count<=35?7:8;
+      const rows=Math.ceil(count/columns), positions=[], minX=19, maxX=82, minY=37, maxY=84;
+      for(let row=0;row<rows;row++){
+        const items=Math.min(columns,count-row*columns), fullStep=(maxX-minX)/Math.max(columns-1,1), usedWidth=fullStep*(items-1), startX=(minX+maxX-usedWidth)/2;
+        const y=rows===1?(minY+maxY)/2:minY+(maxY-minY)*row/(rows-1);
+        for(let column=0;column<items;column++) positions.push([startX+fullStep*column,y]);
+      }
+      return {positions,columns};
+    }
     function buildSeats(){
       const wrap=$('#seats'); wrap.innerHTML='';
+      const layout=makeSeatPositions(seatCount);
+      const positions=customPositions?.length===seatCount?customPositions:layout.positions;
+      seatPositions=positions.map(position=>[...position]);
       seatPositions.forEach(([x,y],i)=>{
         const seat=document.createElement('div'); seat.className='seat'; seat.id=`seat-${i+1}`;
-        seat.style.left=x+'%'; seat.style.top=y+'%';
+        seat.style.left=x+'%'; seat.style.top=y+'%'; seat.style.width=Math.min(8.2,58/layout.columns)+'%';
         const num=document.createElement('span'); num.className='seat-num'; num.textContent=i+1;
         const name=document.createElement('span'); name.className='occupant';
-        seat.append(num,name); wrap.appendChild(seat);
+        seat.append(num,name); seat.addEventListener('pointerdown',event=>beginSeatDrag(event,i,seat)); wrap.appendChild(seat);
       });
+    }
+    function beginSeatDrag(event,index,seat){
+      if(!gameScreen.classList.contains('editing')) return;
+      event.preventDefault(); seat.setPointerCapture(event.pointerId);
+      if(!customPositions?.length) customPositions=seatPositions.map(position=>[...position]);
+      const move=moveEvent=>{
+        const room=$('#classroom').getBoundingClientRect();
+        const x=Math.max(5,Math.min(91,(moveEvent.clientX-room.left)/room.width*100));
+        const y=Math.max(30,Math.min(90,(moveEvent.clientY-room.top)/room.height*100));
+        customPositions[index]=[Number(x.toFixed(2)),Number(y.toFixed(2))]; seatPositions[index]=[...customPositions[index]];
+        seat.style.left=x+'%'; seat.style.top=y+'%';
+      };
+      const end=()=>{ seat.removeEventListener('pointermove',move); seat.removeEventListener('pointerup',end); seat.removeEventListener('pointercancel',end); };
+      seat.addEventListener('pointermove',move); seat.addEventListener('pointerup',end); seat.addEventListener('pointercancel',end);
     }
 
     $('#load-group').addEventListener('click',()=>$('#players-file').click());
@@ -294,17 +337,24 @@
     $('#load-layout').addEventListener('click',()=>$('#layout-file').click());
     $('#layout-file').addEventListener('change',loadLayoutFile);
 
-    function resetState(){ runToken++; queue=shuffle(originalPlayers); occupants=Array(MAX_SEATS).fill(null); ejections={}; running=true; speed=1; document.documentElement.style.setProperty('--speed',1); document.querySelectorAll('.door').forEach(d=>d.classList.remove('open')); document.querySelectorAll('.actor').forEach(a=>a.remove()); $('#speed-btn').textContent='⏩ 2배속'; $('#log').innerHTML=''; renderSeats(); updateStatus(); }
+    function resetState(){ runToken++; queue=shuffle(originalPlayers); occupants=Array(seatCount).fill(null); ejections={}; running=true; speed=1; document.documentElement.style.setProperty('--speed',1); document.querySelectorAll('.door').forEach(d=>d.classList.remove('open')); document.querySelectorAll('.actor').forEach(a=>a.remove()); $('#speed-btn').textContent='⏩ 현재 1배속'; $('#log').innerHTML=''; renderSeats(); updateStatus(); }
     function startGame(){
       const names=parseNames(); errorBox.textContent='';
       if(!names.length){ errorBox.textContent='학생 이름을 한 명 이상 입력해 주세요.'; return; }
-      if(names.length>MAX_SEATS){ errorBox.textContent=`좌석은 ${MAX_SEATS}개입니다. ${names.length-MAX_SEATS}명을 줄여 주세요.`; return; }
-      ensureAudio(); originalPlayers=[...names]; resetState(); showScreen('game'); log(`${names.length}명의 자리 배치를 시작합니다.`); showFun('🏫 두근두근 자리 배치, 출발!'); processQueue();
+      seatCount=Math.max(1,Math.min(MAX_SEATS,Number($('#seat-count').value)||DEFAULT_SEATS)); $('#seat-count').value=seatCount;
+      if(names.length>seatCount){ errorBox.textContent=`학생은 ${names.length}명인데 좌석은 ${seatCount}개입니다. 좌석 수를 늘려 주세요.`; return; }
+      gameScreen.classList.remove('editing'); $('#game-title').textContent='🏫 우리 반 자리 배치'; buildSeats(); ensureAudio(); originalPlayers=[...names]; resetState(); showScreen('game'); log(`${names.length}명 · ${seatCount}석 자리 배치를 시작합니다.`); showFun('🏫 두근두근 자리 배치, 출발!'); processQueue();
     }
     $('#start-btn').addEventListener('click',startGame);
+    $('#edit-layout').addEventListener('click',()=>{
+      seatCount=Math.max(1,Math.min(MAX_SEATS,Number($('#seat-count').value)||DEFAULT_SEATS)); $('#seat-count').value=seatCount;
+      occupants=Array(seatCount).fill(null); buildSeats(); showScreen('game'); gameScreen.classList.add('editing'); $('#game-title').textContent='🪑 책상을 마우스로 옮겨 주세요'; showFun('책상을 잡아서 원하는 위치로 드래그하세요!',false,2200);
+    });
+    $('#auto-layout').addEventListener('click',()=>{ customPositions=null; buildSeats(); showFun('↺ 책상을 자동으로 정렬했습니다.'); });
+    $('#editor-done').addEventListener('click',()=>{ gameScreen.classList.remove('editing'); $('#game-title').textContent='🏫 우리 반 자리 배치'; showScreen('setup'); errorBox.textContent=`${seatCount}개 책상 배치를 적용했습니다.`; });
     $('#sound-btn').addEventListener('click',()=>{ soundOn=!soundOn; $('#sound-btn').textContent=soundOn?'🔊 효과음':'🔇 효과음'; if(soundOn){ ensureAudio(); playSound('seat'); } });
-    $('#speed-btn').addEventListener('click',()=>{ speed=speed===1?2:1; document.documentElement.style.setProperty('--speed',speed); $('#speed-btn').textContent=speed===1?'⏩ 2배속':'▶️ 1배속'; });
-    $('#restart-btn').addEventListener('click',()=>{ if(!confirm('진행 중인 배치를 멈추고 명단 입력 화면으로 돌아갈까요?')) return; running=false; runToken++; document.querySelectorAll('.door').forEach(d=>d.classList.remove('open')); document.querySelectorAll('.actor').forEach(a=>a.remove()); showScreen('setup'); });
+    $('#speed-btn').addEventListener('click',()=>{ speed=speed===3?1:speed+1; document.documentElement.style.setProperty('--speed',speed); $('#speed-btn').textContent=`⏩ 현재 ${speed}배속`; });
+    $('#restart-btn').addEventListener('click',()=>{ if(!confirm('진행 중인 배치를 멈추고 명단 입력 화면으로 돌아갈까요?')) return; running=false; runToken++; gameScreen.classList.remove('editing'); document.querySelectorAll('.door').forEach(d=>d.classList.remove('open')); document.querySelectorAll('.actor').forEach(a=>a.remove()); showScreen('setup'); });
     $('#again-btn').addEventListener('click',()=>{ $('#result-overlay').classList.remove('show'); resetState(); log('같은 명단으로 다시 시작합니다.'); processQueue(); });
     $('#edit-btn').addEventListener('click',()=>{ running=false; runToken++; $('#result-overlay').classList.remove('show'); showScreen('setup'); });
     $('#save-layout-btn').addEventListener('click',saveCurrentLayout);
@@ -344,9 +394,9 @@
 
     function chooseSeat(student){
       const empty=occupants.map((v,i)=>v===null?i:-1).filter(i=>i>=0);
-      if(!empty.length) return {index:Math.floor(Math.random()*MAX_SEATS),eject:true};
+      if(!empty.length) return {index:Math.floor(Math.random()*seatCount),eject:true};
       if((ejections[student]||0)>=3) return {index:empty[Math.floor(Math.random()*empty.length)],eject:false,protected:true};
-      const candidate=Math.floor(Math.random()*MAX_SEATS);
+      const candidate=Math.floor(Math.random()*seatCount);
       if(occupants[candidate]===null) return {index:candidate,eject:false};
       const old=occupants[candidate];
       const canEject=(ejections[old]||0)<3;
@@ -408,15 +458,16 @@
         if(String(rows[0]?.[0]||'').trim()!=='학생 이름') throw new Error('잘못된 명단 형식');
         const names=rows.slice(1).map(row=>String(row[0]||'').trim()).filter(Boolean);
         if(!names.length) throw new Error('참가자 없음');
-        if(names.length>MAX_SEATS) throw new Error(`좌석은 ${MAX_SEATS}개인데 명단에 ${names.length}명이 있습니다.`);
+        if(names.length>MAX_SEATS) throw new Error(`한 학급은 최대 ${MAX_SEATS}명까지 지원합니다. 명단에는 ${names.length}명이 있습니다.`);
+        if(names.length>seatCount){ seatCount=names.length; $('#seat-count').value=seatCount; }
         input.value=names.join('\n'); updateInputCount(); errorBox.textContent=`${names.length}명의 참가자 명단을 불러왔습니다.`;
-      }catch(error){ errorBox.textContent=error.message.startsWith('좌석은')?error.message:'참가자 명단 파일을 읽지 못했습니다. 이 게임에서 저장한 파일인지 확인해 주세요.'; }
+      }catch(error){ errorBox.textContent=error.message.startsWith('한 학급은')?error.message:'참가자 명단 파일을 읽지 못했습니다. 이 게임에서 저장한 파일인지 확인해 주세요.'; }
       finally{ event.target.value=''; }
     }
     function saveCurrentLayout(){
       if(!occupants.some(Boolean)) return;
       const layoutName=prompt('자리표 파일 이름을 입력하세요.','우리 반'); if(!layoutName?.trim()) return;
-      const rows=[['좌석 번호','학생 이름'],...occupants.map((name,i)=>[i+1,name||''])];
+      const rows=[['좌석 번호','학생 이름','책상 X 위치','책상 Y 위치'],...occupants.map((name,i)=>[i+1,name||'',seatPositions[i]?.[0]??'',seatPositions[i]?.[1]??''])];
       downloadCsv(`${safeFileName(layoutName)}_자리표_${localDate()}.csv`,rows);
       $('#save-layout-btn').textContent='✓ 파일 저장 완료'; setTimeout(()=>$('#save-layout-btn').textContent='💾 컴퓨터에 자리표 저장',1400);
     }
@@ -442,21 +493,27 @@
       try{
         const rows=parseCsv(await file.text());
         if(String(rows[0]?.[0]||'').trim()!=='좌석 번호'||String(rows[0]?.[1]||'').trim()!=='학생 이름') throw new Error('잘못된 자리표 형식');
-        const loaded=Array(MAX_SEATS).fill(null);
+        const loaded=[], loadedPositions=[]; let fileSeatCount=0;
         for(const row of rows.slice(1)){
           const seat=Number(String(row[0]||'').trim()), name=String(row[1]||'').trim();
-          if(Number.isInteger(seat)&&seat>=1&&seat<=MAX_SEATS&&name) loaded[seat-1]=name;
+          if(Number.isInteger(seat)&&seat>=1&&seat<=MAX_SEATS){
+            fileSeatCount=Math.max(fileSeatCount,seat); loaded[seat-1]=name||null;
+            const x=Number(row[2]), y=Number(row[3]); if(Number.isFinite(x)&&Number.isFinite(y)&&x>=5&&x<=91&&y>=30&&y<=90) loadedPositions[seat-1]=[x,y];
+          }
         }
-        if(!loaded.some(Boolean)) throw new Error('자리 정보 없음');
-        restoreLayout({name:file.name.replace(/\.csv$/i,''),occupants:loaded}); errorBox.textContent='';
+        if(!fileSeatCount||!loaded.some(Boolean)) throw new Error('자리 정보 없음');
+        const positions=loadedPositions.filter(Boolean).length===fileSeatCount?loadedPositions:null;
+        restoreLayout({name:file.name.replace(/\.csv$/i,''),occupants:Array.from({length:fileSeatCount},(_v,i)=>loaded[i]||null),positions}); errorBox.textContent='';
       }catch(_error){ errorBox.textContent='자리표 파일을 읽지 못했습니다. 이 게임에서 저장한 파일인지 확인해 주세요.'; }
       finally{ event.target.value=''; }
     }
     function restoreLayout(layout){
       runToken++; running=false; queue=[]; ejections={};
-      occupants=Array.from({length:MAX_SEATS},(_v,i)=>typeof layout.occupants?.[i]==='string'?layout.occupants[i]:null);
+      seatCount=Math.max(1,Math.min(MAX_SEATS,layout.occupants?.length||DEFAULT_SEATS)); $('#seat-count').value=seatCount;
+      customPositions=Array.isArray(layout.positions)&&layout.positions.length===seatCount?layout.positions.map(position=>[...position]):null; buildSeats();
+      occupants=Array.from({length:seatCount},(_v,i)=>typeof layout.occupants?.[i]==='string'&&layout.occupants[i]?layout.occupants[i]:null);
       originalPlayers=occupants.filter(Boolean); input.value=originalPlayers.join('\n'); updateInputCount();
-      showScreen('game'); renderSeats(); updateStatus(); $('#current-name').textContent=`${layout.name} 불러옴`; $('#log').innerHTML=''; log(`💾 ‘${layout.name}’ 저장 배치를 불러왔습니다.`,true);
+      gameScreen.classList.remove('editing'); $('#game-title').textContent='🏫 우리 반 자리 배치'; showScreen('game'); renderSeats(); updateStatus(); $('#current-name').textContent=`${layout.name} 불러옴`; $('#log').innerHTML=''; log(`💾 ‘${layout.name}’ 저장 배치를 불러왔습니다.`,true);
       renderResultGrid(); $('#result-overlay').classList.add('show');
     }
     async function processQueue(){
