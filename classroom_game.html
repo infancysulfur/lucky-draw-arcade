@@ -60,6 +60,7 @@
     .game-actions button { padding:9px 13px; border:1px solid #bcc9aa; border-radius:10px; background:#fffdf7; font-weight:700; }
     #editor-actions { display:none; margin-left:auto; gap:8px; }
     #editor-actions button { padding:9px 13px; border:1px solid #bcc9aa; border-radius:10px; background:#fffdf7; font-weight:700; }
+    #editor-seat-count { min-width:54px; display:grid; place-items:center; color:var(--green); background:#fffdf7; border:1px solid #bcc9aa; border-radius:10px; font-weight:700; }
     #editor-done { color:white; background:var(--green)!important; border-color:var(--green)!important; }
     #game-screen.editing .game-actions { display:none; }
     #game-screen.editing #editor-actions { display:flex; }
@@ -146,9 +147,11 @@
     .result-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(135px,1fr)); gap:8px; }
     .result-item { display:flex; gap:8px; padding:9px 11px; border:1px solid #dae0cd; border-radius:9px; background:white; font-size:13px; }
     .result-item b { color:#bb563f; }
-    .result-buttons { display:flex; gap:9px; margin-top:22px; }
+    .result-buttons { display:flex; flex-wrap:wrap; gap:9px; margin-top:22px; }
     .result-buttons button,.result-buttons a { flex:1; padding:12px; border:0; border-radius:11px; text-align:center; text-decoration:none; font-weight:700; }
+    .result-buttons button { min-width:140px; }
     .again { color:white; background:var(--green); }
+    .image-save { color:white; background:#4e72b5; }
     .edit { color:var(--ink); background:#e4e9d8; }
     .confetti { position:fixed; top:-20px; z-index:110; width:10px; height:16px; animation:fall 2.6s linear forwards; }
     @keyframes fall { to { transform:translate(var(--drift),105vh) rotate(720deg); } }
@@ -181,7 +184,11 @@
           <span>학급 인원에 맞게 책상이 자동 배치됩니다</span>
           <input id="seat-count" type="number" min="1" max="40" value="23">
         </div>
-        <div class="saved-row"><button id="edit-layout" class="small-btn wide" type="button">🪑 책상 배치 직접 편집</button></div>
+        <div class="saved-row">
+          <input id="desk-layout-file" type="file" accept=".csv,text/csv" hidden>
+          <button id="edit-layout" class="small-btn wide" type="button">🪑 책상 배치 직접 편집</button>
+          <button id="load-desk-layout" class="small-btn wide" type="button">📂 책상 배치 불러오기</button>
+        </div>
         <div class="option-row">
           <label for="chance">자리 빼앗기 확률</label>
           <input id="chance" type="range" min="0" max="80" step="10" value="40">
@@ -206,6 +213,11 @@
           <button id="restart-btn" type="button">처음부터</button>
         </div>
         <div id="editor-actions">
+          <button id="remove-desk" type="button">− 책상</button>
+          <span id="editor-seat-count">23개</span>
+          <button id="add-desk" type="button">+ 책상</button>
+          <button id="save-desk-layout" type="button">💾 배치 저장</button>
+          <button id="load-desk-layout-editor" type="button">📂 배치 불러오기</button>
           <button id="auto-layout" type="button">↺ 자동 정렬</button>
           <button id="editor-done" type="button">✓ 배치 완료</button>
         </div>
@@ -237,7 +249,7 @@
       <h2 id="result-title">🎉 최종 자리 배치 완료!</h2>
       <p>모든 학생이 자리를 찾았습니다.</p>
       <div id="result-grid" class="result-grid"></div>
-      <div class="result-buttons"><button id="save-layout-btn" class="again">💾 컴퓨터에 자리표 저장</button><button id="again-btn" class="edit">다시 섞기</button><button id="edit-btn" class="edit">명단 수정</button></div>
+      <div class="result-buttons"><button id="save-image-btn" class="image-save">🖼 자리표 이미지 저장</button><button id="save-layout-btn" class="again">💾 자리표 파일 저장</button><button id="again-btn" class="edit">다시 섞기</button><button id="edit-btn" class="edit">명단 수정</button></div>
     </div>
   </div>
 
@@ -290,7 +302,11 @@
       $('#name-count').style.color=count>seatCount?'#d3473e':'';
     }
     input.addEventListener('input',updateInputCount);
-    $('#seat-count').addEventListener('input',()=>{ seatCount=Math.max(1,Math.min(MAX_SEATS,Number($('#seat-count').value)||DEFAULT_SEATS)); customPositions=null; updateInputCount(); });
+    $('#seat-count').addEventListener('input',event=>{
+      const nextCount=Number(event.target.value);
+      if(Number.isInteger(nextCount)&&nextCount>=1&&nextCount<=MAX_SEATS) applySeatCount(nextCount);
+    });
+    $('#seat-count').addEventListener('change',()=>{ $('#seat-count').value=seatCount; });
     chance.addEventListener('input',()=>chanceValue.textContent=chance.value+'%');
 
     function makeSeatPositions(count){
@@ -302,6 +318,36 @@
         for(let column=0;column<items;column++) positions.push([startX+fullStep*column,y]);
       }
       return {positions,columns};
+    }
+    function createResizedPositions(current,newCount){
+      const result=current.slice(0,newCount).map(position=>[...position]);
+      if(result.length>=newCount) return result;
+      const automatic=makeSeatPositions(newCount).positions;
+      const candidates=[...automatic];
+      for(let y=35;y<=87;y+=8.5) for(let x=12;x<=86;x+=8.5) candidates.push([x,y]);
+      while(result.length<newCount){
+        let best=candidates[0], bestScore=-1;
+        for(const candidate of candidates){
+          const score=result.length?Math.min(...result.map(([x,y])=>(candidate[0]-x)**2+((candidate[1]-y)*1.15)**2)):Infinity;
+          if(score>bestScore){ bestScore=score; best=candidate; }
+        }
+        result.push([Number(best[0].toFixed(2)),Number(best[1].toFixed(2))]);
+      }
+      return result;
+    }
+    function resizeSeatLayout(newCount){
+      const current=customPositions?.length===seatCount?customPositions:(seatPositions.length===seatCount?seatPositions:makeSeatPositions(seatCount).positions);
+      customPositions=createResizedPositions(current,newCount); seatCount=newCount; occupants=Array(seatCount).fill(null);
+    }
+    function applySeatCount(nextCount,announce=true){
+      if(nextCount===seatCount) return;
+      const previousCount=seatCount; resizeSeatLayout(nextCount); $('#seat-count').value=seatCount; updateInputCount();
+      if(gameScreen.classList.contains('editing')) buildSeats();
+      $('#editor-seat-count').textContent=`${seatCount}개`;
+      if(!announce) return;
+      const difference=Math.abs(nextCount-previousCount);
+      const message=nextCount>previousCount?`기존 위치를 유지하고 ${difference}개 책상을 추가했습니다.`:`마지막 번호 책상 ${difference}개를 제거했습니다.`;
+      errorBox.textContent=message; if(gameScreen.classList.contains('editing')) showFun(message);
     }
     function buildSeats(){
       const wrap=$('#seats'); wrap.innerHTML='';
@@ -315,6 +361,7 @@
         const name=document.createElement('span'); name.className='occupant';
         seat.append(num,name); seat.addEventListener('pointerdown',event=>beginSeatDrag(event,i,seat)); wrap.appendChild(seat);
       });
+      $('#editor-seat-count').textContent=`${seatCount}개`;
     }
     function beginSeatDrag(event,index,seat){
       if(!gameScreen.classList.contains('editing')) return;
@@ -341,15 +388,23 @@
     function startGame(){
       const names=parseNames(); errorBox.textContent='';
       if(!names.length){ errorBox.textContent='학생 이름을 한 명 이상 입력해 주세요.'; return; }
-      seatCount=Math.max(1,Math.min(MAX_SEATS,Number($('#seat-count').value)||DEFAULT_SEATS)); $('#seat-count').value=seatCount;
-      if(names.length>seatCount){ errorBox.textContent=`학생은 ${names.length}명인데 좌석은 ${seatCount}개입니다. 좌석 수를 늘려 주세요.`; return; }
+      const requestedSeats=Math.max(1,Math.min(MAX_SEATS,Number($('#seat-count').value)||DEFAULT_SEATS));
+      if(requestedSeats!==seatCount) resizeSeatLayout(requestedSeats); $('#seat-count').value=seatCount;
+      if(names.length!==seatCount){ errorBox.textContent=`학생은 ${names.length}명, 좌석은 ${seatCount}개입니다. 학생 수와 좌석 수를 같게 맞춰 주세요.`; return; }
       gameScreen.classList.remove('editing'); $('#game-title').textContent='🏫 우리 반 자리 배치'; buildSeats(); ensureAudio(); originalPlayers=[...names]; resetState(); showScreen('game'); log(`${names.length}명 · ${seatCount}석 자리 배치를 시작합니다.`); showFun('🏫 두근두근 자리 배치, 출발!'); processQueue();
     }
     $('#start-btn').addEventListener('click',startGame);
     $('#edit-layout').addEventListener('click',()=>{
-      seatCount=Math.max(1,Math.min(MAX_SEATS,Number($('#seat-count').value)||DEFAULT_SEATS)); $('#seat-count').value=seatCount;
+      const requestedSeats=Math.max(1,Math.min(MAX_SEATS,Number($('#seat-count').value)||DEFAULT_SEATS));
+      if(requestedSeats!==seatCount) resizeSeatLayout(requestedSeats); $('#seat-count').value=seatCount;
       occupants=Array(seatCount).fill(null); buildSeats(); showScreen('game'); gameScreen.classList.add('editing'); $('#game-title').textContent='🪑 책상을 마우스로 옮겨 주세요'; showFun('책상을 잡아서 원하는 위치로 드래그하세요!',false,2200);
     });
+    $('#load-desk-layout').addEventListener('click',()=>$('#desk-layout-file').click());
+    $('#load-desk-layout-editor').addEventListener('click',()=>$('#desk-layout-file').click());
+    $('#desk-layout-file').addEventListener('change',loadDeskLayoutFile);
+    $('#save-desk-layout').addEventListener('click',saveDeskLayoutFile);
+    $('#remove-desk').addEventListener('click',()=>{ if(seatCount>1) applySeatCount(seatCount-1); else showFun('책상은 최소 1개가 필요합니다.',true); });
+    $('#add-desk').addEventListener('click',()=>{ if(seatCount<MAX_SEATS) applySeatCount(seatCount+1); else showFun(`책상은 최대 ${MAX_SEATS}개까지 가능합니다.`,true); });
     $('#auto-layout').addEventListener('click',()=>{ customPositions=null; buildSeats(); showFun('↺ 책상을 자동으로 정렬했습니다.'); });
     $('#editor-done').addEventListener('click',()=>{ gameScreen.classList.remove('editing'); $('#game-title').textContent='🏫 우리 반 자리 배치'; showScreen('setup'); errorBox.textContent=`${seatCount}개 책상 배치를 적용했습니다.`; });
     $('#sound-btn').addEventListener('click',()=>{ soundOn=!soundOn; $('#sound-btn').textContent=soundOn?'🔊 효과음':'🔇 효과음'; if(soundOn){ ensureAudio(); playSound('seat'); } });
@@ -358,6 +413,7 @@
     $('#again-btn').addEventListener('click',()=>{ $('#result-overlay').classList.remove('show'); resetState(); log('같은 명단으로 다시 시작합니다.'); processQueue(); });
     $('#edit-btn').addEventListener('click',()=>{ running=false; runToken++; $('#result-overlay').classList.remove('show'); showScreen('setup'); });
     $('#save-layout-btn').addEventListener('click',saveCurrentLayout);
+    $('#save-image-btn').addEventListener('click',saveLayoutImage);
 
     function renderSeats(){
       occupants.forEach((name,i)=>{ const label=$(`#seat-${i+1} .occupant`); if(label){ label.textContent=name||''; label.title=name||''; } });
@@ -445,6 +501,49 @@
       const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}), url=URL.createObjectURL(blob), link=document.createElement('a');
       link.href=url; link.download=fileName; document.body.appendChild(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     }
+    function roundedRect(context,x,y,width,height,radius){
+      const r=Math.min(radius,width/2,height/2); context.beginPath(); context.moveTo(x+r,y); context.lineTo(x+width-r,y); context.quadraticCurveTo(x+width,y,x+width,y+r); context.lineTo(x+width,y+height-r); context.quadraticCurveTo(x+width,y+height,x+width-r,y+height); context.lineTo(x+r,y+height); context.quadraticCurveTo(x,y+height,x,y+height-r); context.lineTo(x,y+r); context.quadraticCurveTo(x,y,x+r,y); context.closePath();
+    }
+    function drawFittedText(context,text,x,y,maxWidth,startSize=24,minSize=12){
+      let size=startSize; do{ context.font=`700 ${size}px "Noto Sans KR",sans-serif`; if(context.measureText(text).width<=maxWidth) break; size--; }while(size>minSize);
+      const value=context.measureText(text).width<=maxWidth?text:text.slice(0,Math.max(1,Math.floor(text.length*maxWidth/context.measureText(text).width)))+'…'; context.fillText(value,x,y);
+    }
+    function saveLayoutImage(){
+      if(!occupants.some(Boolean)) return;
+      const className=prompt('이미지에 표시할 반 이름을 입력하세요.','우리 반'); if(!className?.trim()) return;
+      const canvas=document.createElement('canvas'); canvas.width=1600; canvas.height=1000; const context=canvas.getContext('2d');
+      const room={x:55,y:135,width:1490,height:810};
+      context.fillStyle='#f7f2df'; context.fillRect(0,0,canvas.width,canvas.height);
+      context.fillStyle='#20352d'; context.fillRect(0,0,canvas.width,105);
+      context.fillStyle='#ffd45c'; context.font='700 42px "Noto Sans KR",sans-serif'; context.textAlign='left'; context.fillText(`🏫 ${className.trim()} 자리표`,55,67);
+      context.fillStyle='#d1ddd6'; context.font='500 20px "Noto Sans KR",sans-serif'; context.textAlign='right'; context.fillText(`${localDate()} · ${occupants.filter(Boolean).length}명 · ${seatCount}석`,1545,64);
+      roundedRect(context,room.x,room.y,room.width,room.height,24); context.fillStyle='#dcebbd'; context.fill(); context.strokeStyle='#879a67'; context.lineWidth=10; context.stroke();
+      context.fillStyle='#efdfbc'; context.fillRect(room.x+5,room.y+190,room.width-10,room.height-195);
+      roundedRect(context,515,155,570,130,8); context.fillStyle='#315f4a'; context.fill(); context.strokeStyle='#a77545'; context.lineWidth=10; context.stroke();
+      context.fillStyle='#ecf3df'; context.font='700 25px "Noto Sans KR",sans-serif'; context.textAlign='center'; context.fillText('즐거운 우리 반',800,226);
+      context.fillStyle='#9cd9e4'; context.fillRect(85,165,245,95); context.strokeStyle='#fff'; context.lineWidth=9; context.strokeRect(85,165,245,95);
+      context.fillStyle='#c9854f'; context.fillRect(215,280,180,70); context.strokeStyle='#8d5634'; context.lineWidth=6; context.strokeRect(215,280,180,70);
+      context.fillStyle='#d39a62'; context.fillRect(1280,165,175,120); context.strokeStyle='#91613f'; context.strokeRect(1280,165,175,120);
+      context.fillStyle='#8d6547'; context.fillRect(1470,395,70,125); context.fillRect(1470,760,70,125);
+      context.fillStyle='#fff'; context.font='700 17px "Noto Sans KR",sans-serif'; context.fillText('앞문',1505,460); context.fillText('뒷문',1505,825);
+      const deskWidth=seatCount>35?82:seatCount>30?92:104, deskHeight=58;
+      seatPositions.forEach(([percentX,percentY],index)=>{
+        const x=room.x+room.width*percentX/100, y=room.y+room.height*percentY/100, name=occupants[index]||'';
+        context.save(); context.shadowColor='#67482f55'; context.shadowBlur=9; context.shadowOffsetY=6;
+        roundedRect(context,x-deskWidth/2,y-deskHeight/2,deskWidth,deskHeight,9); context.fillStyle=name?'#d9955e':'#c6a27b'; context.fill(); context.strokeStyle='#7c4c31'; context.lineWidth=4; context.stroke(); context.restore();
+        context.fillStyle='#6e412c'; context.font='700 13px "Noto Sans KR",sans-serif'; context.textAlign='left'; context.fillText(String(index+1),x-deskWidth/2+7,y-deskHeight/2+16);
+        if(name){
+          roundedRect(context,x-deskWidth/2+6,y-8,deskWidth-12,28,5); context.fillStyle='#fff8dd'; context.fill();
+          context.fillStyle='#263d32'; context.textAlign='center'; drawFittedText(context,name,x,y+12,deskWidth-20,20,11);
+        }
+      });
+      context.fillStyle='#687970'; context.font='500 17px "Noto Sans KR",sans-serif'; context.textAlign='center'; context.fillText('뽑기왕국 · 교실 자리 배치',800,980);
+      canvas.toBlob(blob=>{
+        if(!blob) return;
+        const url=URL.createObjectURL(blob), link=document.createElement('a'); link.href=url; link.download=`${safeFileName(className)}_자리표_${localDate()}.png`; document.body.appendChild(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+        $('#save-image-btn').textContent='✓ 이미지 저장 완료'; setTimeout(()=>$('#save-image-btn').textContent='🖼 자리표 이미지 저장',1400);
+      },'image/png');
+    }
     function savePlayersFile(){
       const names=parseNames(); if(!names.length){ errorBox.textContent='저장할 학생 명단을 먼저 입력해 주세요.'; return; }
       const groupName=prompt('참가자 명단 파일 이름을 입력하세요.','우리 반'); if(!groupName?.trim()) return;
@@ -459,7 +558,7 @@
         const names=rows.slice(1).map(row=>String(row[0]||'').trim()).filter(Boolean);
         if(!names.length) throw new Error('참가자 없음');
         if(names.length>MAX_SEATS) throw new Error(`한 학급은 최대 ${MAX_SEATS}명까지 지원합니다. 명단에는 ${names.length}명이 있습니다.`);
-        if(names.length>seatCount){ seatCount=names.length; $('#seat-count').value=seatCount; }
+        if(names.length!==seatCount){ resizeSeatLayout(names.length); $('#seat-count').value=seatCount; }
         input.value=names.join('\n'); updateInputCount(); errorBox.textContent=`${names.length}명의 참가자 명단을 불러왔습니다.`;
       }catch(error){ errorBox.textContent=error.message.startsWith('한 학급은')?error.message:'참가자 명단 파일을 읽지 못했습니다. 이 게임에서 저장한 파일인지 확인해 주세요.'; }
       finally{ event.target.value=''; }
@@ -470,6 +569,31 @@
       const rows=[['좌석 번호','학생 이름','책상 X 위치','책상 Y 위치'],...occupants.map((name,i)=>[i+1,name||'',seatPositions[i]?.[0]??'',seatPositions[i]?.[1]??''])];
       downloadCsv(`${safeFileName(layoutName)}_자리표_${localDate()}.csv`,rows);
       $('#save-layout-btn').textContent='✓ 파일 저장 완료'; setTimeout(()=>$('#save-layout-btn').textContent='💾 컴퓨터에 자리표 저장',1400);
+    }
+    function saveDeskLayoutFile(){
+      if(seatPositions.length!==seatCount) buildSeats();
+      const layoutName=prompt('책상 배치 파일 이름을 입력하세요.','우리 반'); if(!layoutName?.trim()) return;
+      const rows=[['책상 번호','책상 X 위치','책상 Y 위치'],...seatPositions.map((position,i)=>[i+1,position[0],position[1]])];
+      downloadCsv(`${safeFileName(layoutName)}_책상배치_${localDate()}.csv`,rows); showFun('✓ 책상 배치 파일을 저장했습니다!');
+    }
+    async function loadDeskLayoutFile(event){
+      const file=event.target.files?.[0]; if(!file) return;
+      try{
+        const rows=parseCsv(await file.text());
+        if(String(rows[0]?.[0]||'').trim()!=='책상 번호'||String(rows[0]?.[1]||'').trim()!=='책상 X 위치'||String(rows[0]?.[2]||'').trim()!=='책상 Y 위치') throw new Error('잘못된 책상 배치 형식');
+        const positions=[]; let fileSeatCount=0;
+        for(const row of rows.slice(1)){
+          const number=Number(row[0]), x=Number(row[1]), y=Number(row[2]);
+          if(!Number.isInteger(number)||number<1||number>MAX_SEATS||!Number.isFinite(x)||!Number.isFinite(y)||x<5||x>91||y<30||y>90||positions[number-1]) throw new Error('잘못된 책상 좌표');
+          fileSeatCount=Math.max(fileSeatCount,number); positions[number-1]=[x,y];
+        }
+        if(!fileSeatCount||positions.filter(Boolean).length!==fileSeatCount) throw new Error('누락된 책상');
+        seatCount=fileSeatCount; $('#seat-count').value=seatCount; customPositions=positions.map(position=>[...position]); occupants=Array(seatCount).fill(null);
+        buildSeats(); showScreen('game'); gameScreen.classList.add('editing'); $('#game-title').textContent='🪑 불러온 책상 배치를 확인해 주세요'; showFun(`📂 ${seatCount}개 책상 배치를 불러왔습니다!`,false,1800); errorBox.textContent=''; updateInputCount();
+      }catch(_error){
+        const message='책상 배치 파일을 읽지 못했습니다. 이 게임에서 저장한 배치 파일인지 확인해 주세요.'; errorBox.textContent=message;
+        if(gameScreen.classList.contains('editing')) showFun('⚠️ 올바른 책상 배치 파일이 아닙니다.',true,1800);
+      }finally{ event.target.value=''; }
     }
     function parseCsv(text){
       const rows=[]; let row=[], cell='', quoted=false;
